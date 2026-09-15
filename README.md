@@ -16,6 +16,18 @@ Dette er stedet hvor vi deler vores R-scripts, noter, data og bøger til Data An
 - **OLA1** – overblik over OLA1 og rettelser
 - **OLA2** – overblik over OLA2
 
+## Sådan får du mappen ned på din egen computer (kun første gang)
+
+Åbn Terminal (Mac) eller RStudios Terminal-fane, og skriv:
+
+```
+git clone git@github.com:CStylerMM/StudygroupYAYAYA.git
+```
+
+Tryk Enter. Nu har du en mappe på din computer med alle filerne fra dette repo.
+
+Åbn den derefter som et projekt i RStudio: File → New Project → Existing Directory, og vælg den nye `StudygroupYAYAYA`-mappe.
+
 ## Vi har nu en fælles mappe på vores computere
 
 Når du har klonet repoet, ligger der nu en mappe på din egen computer der hedder `StudygroupYAYAYA`. Den ser sådan ud i Finder:

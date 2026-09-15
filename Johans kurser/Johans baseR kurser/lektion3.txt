@@ -1,0 +1,71 @@
+library(nycflights13)
+
+# Show install packages in RStudio
+# install.packages(nycflights13)
+
+?flights
+View(flights)
+
+flights
+
+#Filter
+filter(flights, month == 1, day == 1)
+
+#add to variable
+jan1 <- filter(flights, month == 1, day == 1)
+
+# Arrange
+arrange(flights, desc(day))
+
+#Select
+select(flights, month, day)
+select(flights, -(day:time_hour))
+
+#Mutate
+mutate(flights,
+       gain = dep_delay - arr_delay
+)
+
+View(mutate(flights,
+            gain = dep_delay - arr_delay,
+            hours = air_time / 60,
+            gain_per_hour = gain/hours
+))
+
+
+# Summarise
+summarise(flights, delay = mean(dep_delay))
+
+summarise(flights, delay = mean(dep_delay, na.rm = TRUE))
+
+NA / 5
+
+NA == 10
+
+NA / 2
+
+NA == NA
+
+is.na(5)
+
+# Can use is.na() in filter
+filter(flights, is.na(dep_deplay))
+
+
+# group_buy
+summarise(group_by(flights, month), delay = mean(dep_delay, na.rm = TRUE))
+
+# multiple variables
+summarise(group_by(flights, month, day), delay = mean(dep_delay, na.rm = TRUE))
+
+
+summarise(group_by(filter(flights, carrier=="DL"), month, day), delay = mean(dep_delay, na.rm = TRUE))
+
+flights_dl <- filter(flights, carrier=="DL")
+flights_dl_by_month_by_day <- group_by(flights_dl, month, day)
+summarise(flights_dl_by_month_by_day, delay = mean(dep_delay, na.rm = TRUE))
+
+flights %>%
+  group_by(month, day) %>%
+  filter(carrier=="DL") %>%
+  summarise(delay = mean(dep_delay, na.rm = TRUE))

@@ -16,6 +16,20 @@ Dette er stedet hvor vi deler vores R-scripts, noter, data og bøger til Data An
 - **OLA1** – overblik over OLA1 og rettelser
 - **OLA2** – overblik over OLA2
 
+## Vi har nu en fælles mappe på vores computere
+
+Når du har klonet repoet, ligger der nu en mappe på din egen computer der hedder `StudygroupYAYAYA`. Den ser sådan ud i Finder:
+
+![Vores fælles mappe](README%20billeder/1.se%20vores%20f%C3%A6llesmappe.png)
+
+Det er den samme mappe som ligger på GitHub, bare på din egen maskine. Alt hvad du ser her, kan du åbne, læse og redigere, ligesom du plejer med almindelige filer.
+
+## Vi kan tilføje mapper og filer herinde
+
+Du kan roligt oprette nye mapper og filer direkte i denne mappe, ligesom du ville i enhver anden mappe på din computer, f.eks. med højreklik → "Ny mappe", eller ved at gemme et nyt script fra RStudio direkte ind i mappen. De bliver ikke automatisk synlige for andre, det kræver et git push (se nedenfor).
+
+![Du kan tilføje i mappen, waow](README%20billeder/2.du%20kan%20tilf%C3%B8je%20i%20mappen%20waow.png)
+
 ## Sådan tilgår og redigerer du et script
 
 1. Åbn dit RStudio-projekt for StudygroupYAYAYA.
@@ -24,22 +38,30 @@ Dette er stedet hvor vi deler vores R-scripts, noter, data og bøger til Data An
 
 ## Sådan uploader du dine ændringer (så andre kan se dem)
 
-Åbn Terminal-fanen i RStudio (ligger som en fane ved siden af "Console"). Skriv disse tre kommandoer, én for én, og tryk Enter efter hver:
+Hvis vi vil have vores ændringer til at gå igennem til resten af gruppen, skal vi ind i RStudio, vælge "Terminal"-fanen (ligger som en fane ved siden af "Console"), og følge disse trin.
+
+Skriv disse tre kommandoer, én for én, og tryk Enter efter hver:
 
 ```
 git add .
 ```
 Dette markerer alle dine ændringer til at blive gemt.
 
+![Kør git add](README%20billeder/3.%20k%C3%B8r%20gitt%20add.png)
+
 ```
 git commit -m "kort besked om hvad du har ændret"
 ```
 Dette gemmer ændringen med en besked, f.eks. `"tilføjet script til OLA2"`. Skift beskeden ud hver gang, så den passer til hvad du faktisk har gjort.
 
+![Kør næste del](README%20billeder/4.%20k%C3%B8r%20n%C3%A6ste%20del.png)
+
 ```
 git push
 ```
-Dette sender dine ændringer op på GitHub, så resten af gruppen kan se dem.
+Dette sender dine ændringer op på GitHub, så resten af gruppen kan se dem. Når du trykker Enter her, pusher den dine filer direkte over i vores fælles git-mappe på GitHub. Så snart det er kørt igennem uden fejl, kan resten af gruppen se dine ændringer.
+
+![Push det](README%20billeder/5.%20push%20det.png)
 
 ## Sådan henter du andres nye filer ned
 

@@ -1,0 +1,54 @@
+### Part 1
+# Data types, numeric/integer, character, logical
+45
+1/3
+pi
+
+"test"
+"hej med jer"
+
+TRUE
+FALSE
+
+# Calculations
+45 + pi
+pi^2
+
+45 + "fisk"
+"fisk" + "ost"
+
+TRUE & FALSE
+TRUE | FALSE
+TRUE == TRUE
+
+# Assignment
+a <- 4
+b <- 10
+c <- "r course"
+
+a + b
+
+p <-
+  ggplot(mpg, aes(x=displ, y=hwy)) +
+  geom_point()
+
+# Functions
+nchar(c)
+
+ggplot(mpg)
+
+seq(0, 5)
+
+
+### Part 2
+library(tidyverse)
+csv <- read_delim("data/example.csv")
+
+library(readxl)
+xlsx <- read_excel("data/example.xlsx")
+
+library(RODBC)
+con <- odbcConnectAccess2007("data/example.accdb")
+
+accdb <- sqlFetch(con, "Table1")
+

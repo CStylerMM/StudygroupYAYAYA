@@ -416,3 +416,4 @@ ggplot(data_plot_baum, aes(x = kvartal)) +
        subtitle = "Simpelt gennemsnit af 4 udvalgte spørgsmål (Baum, 2016). Grøn = Baums artikel, rød = opgavens periode") +
   theme_minimal() +
   theme(legend.position = "top")
+

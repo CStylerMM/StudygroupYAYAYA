@@ -150,3 +150,21 @@ dfBoligSiden_ingenNA$liggetid <- as.numeric(dfBoligSiden_ingenNA$liggetid)
 #etabler ny kolonne med alder
 dfBoligSiden_ingenNA$alder <- sapply(dfBoligSiden_ingenNA$opført, alderBr)
 
+
+
+rens_by <- function(x) {
+  x <- tolower(x)                      # alt til små bogstaver
+  x <- gsub("\\s*\\(.*?\\)", "", x)    # fjern alt i parentes
+  x <- gsub("[0-9]", "", x)            # fjern tal/id'er
+  x <- gsub("æ", "ae", x)
+  x <- gsub("ø", "oe", x)
+  x <- gsub("å", "aa", x)
+  x <- gsub("é", "e", x)
+  x <- gsub("-", " ", x)               # bindestreg til mellemrum
+  trimws(x)                            # fjern mellemrum i enderne
+}
+
+byer_data_ren$by <- rens_by(byer_data_ren$BYER)
+dfBoligSiden_ingenNA$by <- rens_by(dfBoligSiden_ingenNA$by)
+
+

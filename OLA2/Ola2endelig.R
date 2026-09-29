@@ -5,7 +5,7 @@ library(ggplot2)   #flyttet op, så alle pakker loades samlet
 dst_get_tables()
 library(readxl)
 
-boligsiden_OLA <- read_excel("Ida Rstudio Projekter/OLA 1/boligsiden OLA.xlsx", skip = )
+boligsiden_OLA <- read_excel("Ida Rstudio Projekter/OLA 1/boligsiden OLA.xlsx", skip = 1)
 View(boligsiden_OLA)
 #Opgave 1.1 – Det første skridt
 #Skriv en kode, der viser hvordan du finder en tabel som kan give en liste over byer med indbyggertal vha
@@ -525,3 +525,32 @@ tabel_valider   #jaaaa taaaaak
 
 ## ehm, positiv afvigelse = modellen gættede for højt (mindre negativt end virkeligheden)
 #dette er en efterfølgende kontrol af metoden, ikke selve hovedforudsigelsen, som er 2026K3 i trin 1
+
+#OPGAVE 2.3 – Salg resten af året
+#vi bruger forudsigelsen fra 2.2 (2026K3) og valideringen på 2023K3 til at vurdere usikkerheden
+
+#1. selve forudsigelsen og dens retning
+pred_di_2026    #-0,27 pct.
+pred_dst_2026   #-0,79 pct.
+
+#2. hvor bred er usikkerheden? (fra prediction-intervallerne i 2.2)
+#DI-FTI: [-4,61 ; 4,06]   DST FTI: [-5,54 ; 3,96]
+
+#3. historisk undervurderer modellen fald (fra valideringen på 2023K3)
+tabel_valider   #DI-FTI undervurderede med 2,04, DST FTI med 2,34 procentpoint
+
+#hvor stor er den seneste tids vækst, som reference for om -0,27/-0,79 er meget eller lidt?
+data_21[data_21$kvartal >= 2025.75, c("kvartal", "realvaekst")]
+
+#ekstra ekstra vi vil vide ekstra ting
+#kort tjek: er K3 historisk et svagere kvartal for privatforbruget? (relevant for vurderingen i 2.3)
+data_21$kvartal_nr <- round((data_21$kvartal - floor(data_21$kvartal)) * 4) + 1
+aggregate(realvaekst ~ kvartal_nr, data = data_21, FUN = mean)
+## ehm, kvartalerne ligger tæt (1,29-1,36 pct.), K3 er ikke det svageste. Ingen sæsoneffekt at forklare faldet med.
+
+
+
+
+
+
+

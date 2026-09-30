@@ -51,10 +51,7 @@ Migrantmeta |> filter(concept=="geo")
 
 
 myquery = list(
-  unit="[1-9]",
-  geo=c("DK", "DE", "IT", "ES"),
-  date_filter=">2000"
-)
+  geo=c("DK", "DE", "IT", "ES"))
 
 Migrantdata=get_eurostat_data("migr_eiord",
                           filters = myquery,

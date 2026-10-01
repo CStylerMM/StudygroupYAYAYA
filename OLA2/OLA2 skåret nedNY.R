@@ -1,0 +1,731 @@
+#OLA 2, opgave 1 - Boliger og DST
+
+#### Opgave 1.1 – Det første skridt ####
+#Skriv en kode, der viser hvordan du finder en tabel som kan give en liste over byer med indbyggertal vha
+#DST-pakken dkstat.
+
+#tid til at bruge dkstat
+library(dkstat)
+
+dst_search(string = "byområde", field = "text")   #søger i DST's tabeller efter ordet "byområde", her fandt vi BY3
+
+by3_meta <- dst_meta(table = "BY3", lang = "da")   #henter beskrivelsen af BY3
+by3_meta$variables                                 #viser hvilke variable vi kan vælge på
+
+df_byer_folketal <- dst_get_data(
+  table = "BY3",               #tabellen vi fandt
+  BYER = "*",                  #alle byer
+  Tid = "2026",                #kun 2026
+  FOLKARTAET = "Folketal",     #vi vil have folketal
+  meta_data = by3_meta,        #bruger meta-dataen vi lige hentede
+  lang = "da"
+)
+
+sum(df_byer_folketal$value)   #samlet folketal før vi renser, så vi kan sammenligne bagefter
+
+#vi renser: det der ikke er en by skal ud
+df_byer_renset <- df_byer_folketal[df_byer_folketal$value != 0, ]                 #fjerner rækker med 0 indbyggere
+df_byer_renset <- df_byer_renset[!grepl("Uden fast bopæl", df_byer_renset$BYER), ]  #fjerner "Uden fast bopæl", det er ikke en by
+df_byer_renset <- df_byer_renset[!grepl("Landdistrikter", df_byer_renset$BYER), ]   #fjerner landdistrikter, det er heller ikke en by
+
+nrow(df_byer_renset)                                               #antal rækker tilbage
+sum(df_byer_renset$value)                                          #folketal i byerne efter rensning
+1 - sum(df_byer_renset$value) / sum(df_byer_folketal$value) #andel af folketallet vi har fjernet
+
+
+#### Opgave 1.2 – Kategori-variabel. ####
+#Lav en kategorivariabel i R hvor du skal inddele byerne i følgende kategorier: "landsby","lille by",
+#"almindelig by", "større by", "storby" ud fra et interval på indbyggertal som du selv definerer.
+
+#navnene i DST og boligdata skal være ens før vi kan merge, så vi laver en rense-funktion
+rens_by <- function(x) {
+  x <- tolower(x)                     #alt til små bogstaver
+  x <- gsub("\\s*\\(.*?\\)", "", x)   #fjerner alt i parentes
+  x <- gsub("[0-9]", "", x)           #fjerner tal
+  x <- gsub("æ", "ae", x)             #æ, ø, å og é skrives om, så navnene matcher
+  x <- gsub("ø", "oe", x)
+  x <- gsub("å", "aa", x)
+  x <- gsub("é", "e", x)
+  x <- gsub("-", " ", x)              #bindestreg bliver til mellemrum
+  trimws(x)                           #fjerner mellemrum i enderne
+}
+
+df_byer_renset$by <- rens_by(df_byer_renset$BYER)   #ny kolonne "by" med rensede navne
+head(df_byer_renset[, c("BYER", "by")])                    #tjek at navnene ser rigtige ud
+
+#nogle byer ligger i flere kommuner og står derfor flere gange
+dubletter <- df_byer_renset$by[duplicated(df_byer_renset$by)]
+df_byer_renset[df_byer_renset$by %in% dubletter, c("BYER", "value")]   #tjek: er det samme by delt over kommuner, eller to byer med samme navn?
+
+df_byer_bycat <- aggregate(value ~ by, data = df_byer_renset, FUN = sum)   #lægger delene sammen, så hver by står én gang
+names(df_byer_bycat) <- c("by", "folketal")                                       #giver kolonnen et navn der siger noget
+sum(duplicated(df_byer_bycat$by))                                                 #skal være 0
+
+#grænserne har vi selv valgt. DST tæller kun bebyggelser fra 200 indbyggere som by, så "landsby" er sat til under 1.000
+df_byer_bycat$bycat <- ifelse(
+  df_byer_bycat$folketal < 1000, "landsby",
+  ifelse(
+    df_byer_bycat$folketal < 5000, "lille by",
+    ifelse(
+      df_byer_bycat$folketal < 20000, "almindelig by",
+      ifelse(
+        df_byer_bycat$folketal < 100000, "større by",
+        "storby"
+      )
+    )
+  )
+)
+
+table(df_byer_bycat$bycat)   #antal byer i hver kategori, alle fem skal have byer
+
+## husk at begrunde grænserne i rapporten, de skal kunne forsvares
+
+
+#### Opgave 1.3 – Merge de to dataframes ####
+#Indlæs filen med boliger og tilpas de to dataframes så du kan merge de to sammen via variablen ”by”
+#således at du får kategorien bycat med i dit bolig-datasæt fra OLA 1.
+
+#tid til at bruge readxl
+library(readxl)
+
+df_bolig_raa <- read_excel("Ida Rstudio Projekter/OLA 1/boligsiden OLA.xlsx", skip = 1)   #stien starter fra projektmappen
+
+df_bolig_raa[df_bolig_raa == "NA"] <- NA      #teksten "NA" bliver til rigtige NA
+df_bolig_renset <- na.omit(df_bolig_raa)      #fjerner alle rækker med mindst én NA
+
+nrow(df_bolig_raa)       #antal boliger før
+nrow(df_bolig_renset)    #antal boliger efter, forskellen skal med i rapporten
+
+#tre boliger har postnummer og by byttet om. Tjek først at det er de rigtige rækker
+df_bolig_renset[c(264, 1740, 2031), c("postnr", "by")]
+
+df_bolig_renset$postnr[264] <- as.numeric(df_bolig_renset$by[264])     #byen stod i postnr-kolonnen
+df_bolig_renset$postnr[1740] <- as.numeric(df_bolig_renset$by[1740])
+df_bolig_renset$postnr[2031] <- as.numeric(df_bolig_renset$by[2031])
+
+df_bolig_renset$by[264] <- "moeldrup"      #og den rigtige by sættes ind
+df_bolig_renset$by[1740] <- "kibaek"
+df_bolig_renset$by[2031] <- "hilleroed"
+
+#alle tal-kolonner skal være tal, ellers kan vi ikke regne på dem
+tal_kolonner <- c("pris", "opført", "kvmpris", "størrelse", "mdudg", "grund", "værelser", "postnr", "vejnr")
+for (kol in tal_kolonner) {
+  df_bolig_renset[[kol]] <- as.numeric(df_bolig_renset[[kol]])   #laver kolonnen om til tal
+}
+
+#liggetid har bogstaver i ("dage"), så de skal fjernes før det bliver til tal
+df_bolig_renset$liggetid <- gsub("[a-zA-Z]", " ", df_bolig_renset$liggetid)
+df_bolig_renset$liggetid <- as.numeric(df_bolig_renset$liggetid)
+
+#alder: hvis opført er over 0 regner vi alder ud, ellers NA
+df_bolig_renset$alder <- ifelse(df_bolig_renset$opført > 0, 2026 - df_bolig_renset$opført, NA)
+
+#region ud fra postnummer. Postnr er tal nu, så sammenligningen med 1000, 3000 osv. virker rigtigt
+find_region <- function(postnr) {
+  if (postnr >= 1000 & postnr <= 2999) {
+    retval <- "hovedstaden"
+  } else if (postnr >= 3000 & postnr <= 3699) {
+    retval <- "sjælland"
+  } else if (postnr >= 3700 & postnr <= 3790) {
+    retval <- "bornholm"
+  } else if (postnr >= 4000 & postnr <= 4999) {
+    retval <- "sydsjælland"
+  } else if (postnr >= 5000 & postnr <= 6999) {
+    retval <- "syddanmark"
+  } else if (postnr >= 7000 & postnr <= 7999) {
+    retval <- "midtjylland"
+  } else if (postnr >= 8000 & postnr <= 8999) {
+    retval <- "aarhus omegn"
+  } else if (postnr >= 9000 & postnr <= 9990) {
+    retval <- "nordjylland"
+  } else {
+    retval <- NA
+  }
+  return(retval)
+}
+
+df_bolig_renset$region <- sapply(df_bolig_renset$postnr, find_region)   #kører funktionen på hver bolig
+
+#bynavnene i boligdata renses med samme funktion som DST-data
+df_bolig_renset$by <- rens_by(df_bolig_renset$by)
+
+#postdistrikt-bogstaver ("aarhus c", "koebenhavn k") bruger DST ikke, så de fjernes i enden af navnet
+df_bolig_renset$by <- sub(" (c|k|v|n|s|m|sv|nv|oe|soe|noe)$", "", df_bolig_renset$by)
+
+
+#### Opgave 1.4 – Plot ####
+#Din merge skal producere en dataframe og et plot, som minder om det du ser nedenfor - men den
+#præcise udformning kommer naturligvis an på hvilken inddeling du vælger.
+
+#merge på "by": boligdata til venstre, bycat og folketal fra DST til højre
+df_bolig_bycat <- merge(
+  df_bolig_renset[, c("by", "pris", "kvmpris", "region")],
+  df_byer_bycat[, c("by", "bycat", "folketal")],
+  by = "by",
+  all.x = TRUE      #beholder alle boliger, også dem uden match i DST
+)
+
+nrow(df_bolig_renset) == nrow(df_bolig_bycat)   #skal være TRUE, ellers har merge ganget boliger op
+
+sum(is.na(df_bolig_bycat$bycat))   #boliger uden match i DST
+head(sort(table(df_bolig_bycat$by[is.na(df_bolig_bycat$bycat)]), decreasing = TRUE), 25)   #de byer der oftest mangler match
+
+df_bolig_bycat <- na.omit(df_bolig_bycat)   #først nu fjerner vi boliger uden bycat
+nrow(df_bolig_bycat)                               #boliger tilbage til plottet
+
+#dataframe til plottet: gennemsnitlig kvm-pris og antal boliger pr. bykategori
+df_kvmpris_bycat <- aggregate(kvmpris ~ bycat, data = df_bolig_bycat, FUN = mean)
+df_antal_bycat <- aggregate(kvmpris ~ bycat, data = df_bolig_bycat, FUN = length)
+df_kvmpris_bycat$antal <- df_antal_bycat$kvmpris   #kategorierne står i samme rækkefølge i begge, så antal kan lægges på
+
+#så søjlerne kommer i størrelsesorden i stedet for alfabetisk
+df_kvmpris_bycat$bycat <- factor(df_kvmpris_bycat$bycat,
+                                 levels = c("landsby", "lille by", "almindelig by", "større by", "storby"))
+
+#kategorierne med højest og lavest kvm-pris, bruges i captionen
+hoejeste <- df_kvmpris_bycat$bycat[which.max(df_kvmpris_bycat$kvmpris)]
+laveste <- df_kvmpris_bycat$bycat[which.min(df_kvmpris_bycat$kvmpris)]
+
+#tid til at bruge ggplot2
+library(ggplot2)
+
+ggplot(df_kvmpris_bycat, aes(x = bycat, y = kvmpris)) +
+  geom_bar(stat = "identity", fill = "pink", width = 0.7) +   #søjlerne får den højde vi selv har regnet
+  geom_text(aes(label = paste0(round(kvmpris), " kr.\n(n = ", antal, ")")), vjust = -0.3, size = 3.5) +   #pris og antal over søjlen
+  ylim(0, max(df_kvmpris_bycat$kvmpris) * 1.15) +      #plads over søjlerne til teksten
+  labs(title = "Gennemsnitlig pris pr. m² efter bykategori",
+       subtitle = "Boliger til salg, byer kategoriseret efter DST's byområder 2026",
+       x = "Bykategori", y = "Kr. pr. m²",
+       caption = paste0("Højeste pris pr. m²: ", hoejeste, " (", round(max(df_kvmpris_bycat$kvmpris)),
+                        " kr.). Laveste: ", laveste, " (", round(min(df_kvmpris_bycat$kvmpris)),
+                        " kr.).\nKilde: Boligsiden og Danmarks Statistik (BY3)")) +
+  theme_classic()   #rent tema: hvid baggrund, ingen gitterlinjer
+
+## vi vender tilbage og ser på hvorfor kategorierne koster det de gør
+
+
+#### Opgave 2.1 – Opdatering af DI’s forbrugertillidsindikator ####
+#Opdatér DI’s forbrugertillidsindikator med data frem til og med 2023 fra artiklen ”Forbruget
+#fortsætter fremgangen i 2016” (Baum, 2016). Lav vurdering af om forbrugertillidsindikatoren fra DI
+#fortsat er bedre end forbrugertillidsindikatoren fra DST. (Hint: I bliver nødt til at nærlæse bilaget for
+#DI-FTI for at finde starttidspunktet for estimationen, spørgsmålene, samt tabel, der sammenligner
+#FTI og DI-FTI)
+
+## Vi har valgt at bruge alle data frem til i dag (2026) i stedet for at stoppe i 2023
+
+#Y: årlig realvækst i forbruget. Vi henter alt, så det slutter af sig selv ved seneste kvartal
+
+#tid til at bruge dkstat
+library(dkstat)
+
+nkh1_meta <- dst_meta(table = "NKH1", lang = "da")   #beskrivelsen af NKH1
+
+df_forbrug <- dst_get_data(
+  table = "NKH1",
+  TRANSAKT = "P.31 Husholdningernes forbrugsudgifter",   #husholdningernes forbrug
+  PRISENHED = "2020-priser, kædede værdier",             #uden prisstigninger
+  SÆSON = "Sæsonkorrigeret",
+  Tid = "*",                                             #alt!!!
+  meta_data = nkh1_meta,
+  lang = "da"
+)
+
+df_forbrug <- df_forbrug[order(df_forbrug$TID), ]   #sorterer efter tid
+head(df_forbrug, 1)   #slad os se hvornår det starter
+tail(df_forbrug, 1)   #slutter det i 2026? - ja frem til 01.04.2026 lige nu.
+
+#kvartalsdata som tidsserie, og årlig vækst (lag = 4 sammenligner med samme kvartal året før)
+ts_forbrug <- ts(df_forbrug$value, start = c(1990, 1), frequency = 4)
+vaekst <- (exp(diff(log(as.numeric(ts_forbrug)), lag = 4)) - 1) * 100   #formlen fra slidesene
+ts_realvaekst <- ts(vaekst, start = c(1991, 1), frequency = 4)          #første vækst er 1991K1, fordi vi mister et år
+
+#vi starter i 2000K1, fordi Baum starter dér
+ts_realvaekst_fra2000 <- window(ts_realvaekst, start = c(2000, 1)) #bruger window til at udvælge et tidspunkt
+end(ts_realvaekst_fra2000)   #seneste kvartal med vækst
+
+
+#X: forbrugertillid. DST giver den månedligt, så den skal omregnes til kvartaler, så det matcher yyyyyyyyyy
+forv1_meta <- dst_meta(table = "FORV1", lang = "da")
+
+#de seks spørgsmål der indgår i DI-FTI eller DST FTI (F2, F3, F4, F5, F9, F10)
+unique(forv1_meta)
+
+forv1_query <- list(
+  INDIKATOR = c(
+    "Familiens økonomiske situation i dag, sammenlignet med for et år siden",
+    "Familiens økonomiske  situation om et år, sammenlignet med i dag",
+    "Danmarks økonomiske situation i dag, sammenlignet med for et år siden",
+    "Danmarks økonomiske situation om et år, sammenlignet med i dag",
+    "Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
+    "Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr."
+  ),
+  Tid = "*"
+)
+
+df_tillid_raa <- dst_get_data(
+  table = "FORV1",
+  query = forv1_query,
+  meta_data = forv1_meta,
+  lang = "da"
+)
+
+#tid til at bruge tidyr
+library(tidyr)
+
+df_tillid_raa <- df_tillid_raa[order(df_tillid_raa$TID), ]
+df_tillid_bred <- pivot_wider(df_tillid_raa, names_from = INDIKATOR, values_from = value)   #ét spørgsmål pr. kolonne
+df_tillid_bred <- df_tillid_bred[df_tillid_bred$TID >= as.Date("2000-01-01"), ] #vi starter fra år 2000 ligesom Mr. Baum
+
+#månedlig tidsserie, og så aggregeres der til kvartaler (3 måneder lagt sammen og delt med 3 = gennemsnit)
+ts_tillid_md <- ts(as.matrix(df_tillid_bred[, -1]), start = c(2000, 1), frequency = 12) #tidsserie m måned
+ts_tillid_kvartal <- aggregate(ts_tillid_md, nfrequency = 4) / 3 #tidsserie m kvartal 
+
+end(ts_tillid_kvartal)    #seneste hele kvartal med forbrugertillid
+ncol(ts_tillid_kvartal)   #skal være 6, fordi vi har 6 spørgsmål 
+
+
+#de to indikatorer er bare gennemsnit af spørgsmål
+kol <- colnames(ts_tillid_kvartal)
+kol
+
+#mellemrum efter koden, så "F1 " ikke fanger "F10 " - med andre ord. vi siger di er 4 spørgsmål og dst er 5 spørgsmål
+di_kol <- startsWith(kol, "F2 ") | startsWith(kol, "F4 ") | startsWith(kol, "F9 ") | startsWith(kol, "F10 ")   #Baums fire spørgsmål
+dst_kol <- startsWith(kol, "F2 ") | startsWith(kol, "F3 ") | startsWith(kol, "F4 ") | startsWith(kol, "F5 ") | startsWith(kol, "F9 ")   #DST's fem spørgsmål
+
+sum(di_kol)    #skal være 4
+sum(dst_kol)   #skal være 5
+
+df_fti_kvartal <- data.frame(
+  kvartal = round(as.numeric(time(ts_tillid_kvartal)), 2),   #2000.00, 2000.25, 2000.50 osv.
+  di_fti = rowMeans(ts_tillid_kvartal[, di_kol]),
+  dst_fti = rowMeans(ts_tillid_kvartal[, dst_kol])
+) #Yay nu har vi kolonner med DI og DST
+
+df_vaekst_kvartal <- data.frame(
+  kvartal = round(as.numeric(time(ts_realvaekst_fra2000)), 2),
+  realvaekst = as.numeric(ts_realvaekst_fra2000)
+) #dobbelt yay, det her er vores realvækst yay
+
+#merge: vi sætter tillid (X) og vækst (Y) sammen i én df, så hver række er ét kvartal
+#kvartal er et tal: 2000.00 = 2000K1, 2000.25 = 2000K2, 2000.50 = 2000K3, 2000.75 = 2000K4, 2001.00 = 2001K1
+df_fti_vaekst <- merge(df_fti_kvartal, df_vaekst_kvartal, by = "kvartal")
+
+head(df_fti_vaekst, 3)
+tail(df_fti_vaekst, 3) #yay vi kan se vi har 106 kvartaller 
+
+seneste <- tail(df_fti_vaekst$kvartal, 1) #tager det sidste kvartal
+seneste_tekst <- paste0(floor(seneste), "K", round((seneste - floor(seneste)) * 4) + 1)
+seneste_tekst   #seneste kvartal vi har både tillid og forbrug for
+
+
+#to simple lineære regressioner: Y = realvækst, X = én indikator ad gangen
+lm_di <- lm(realvaekst ~ di_fti, data = df_fti_vaekst)
+lm_dst <- lm(realvaekst ~ dst_fti, data = df_fti_vaekst)
+
+summary(lm_di)
+#Residuals:
+#Min      1Q  Median      3Q     Max 
+#-4.8172 -1.5754 -0.0176  1.1989  8.0720 
+
+#Coefficients:
+#  Estimate Std. Error t value Pr(>|t|)    
+#(Intercept)  2.23679    0.24095   9.283 2.68e-15 ***
+#  di_fti       0.18606    0.02362   7.879 3.39e-12 ***
+#  ---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+#Residual standard error: 2.19 on 104 degrees of freedom
+#Multiple R-squared:  0.3738,	Adjusted R-squared:  0.3677 
+#F-statistic: 62.07 on 1 and 104 DF,  p-value: 3.386e-12
+
+summary(lm_dst)
+#Call:
+#lm(formula = realvaekst ~ dst_fti, data = df_fti_vaekst)
+
+#Residuals:
+#  Min     1Q Median     3Q    Max 
+#-5.891 -1.536 -0.060  1.448  8.094 
+
+#Coefficients:
+#  Estimate Std. Error t value Pr(>|t|)    
+#(Intercept)  1.42304    0.23186   6.137 1.55e-08 ***
+#  dst_fti      0.15574    0.02588   6.018 2.68e-08 ***
+#  ---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+#
+#Residual standard error: 2.383 on 104 degrees of freedom
+#Multiple R-squared:  0.2583,	Adjusted R-squared:  0.2511 
+#F-statistic: 36.21 on 1 and 104 DF,  p-value: 2.679e-08
+
+
+
+#funktion der laver Baums tabel (R2 og korrelation) på et udsnit af data
+baum_tabel <- function(d) {
+  data.frame(
+    Maal = c("Forklaringsgrad (R2)", "Korrelation"),
+    DI_FTI = round(c(summary(lm(realvaekst ~ di_fti, data = d))$r.squared,
+                     cor(d$di_fti, d$realvaekst)), 2),
+    FTI = round(c(summary(lm(realvaekst ~ dst_fti, data = d))$r.squared,
+                  cor(d$dst_fti, d$realvaekst)), 2)
+  )
+}
+
+#Baums egne tal fra bilaget (boks 1), 2000K1-2016K2
+df_baum_original <- data.frame(
+  Maal = c("Forklaringsgrad (R2)", "Korrelation"),
+  DI_FTI = c(0.54, 0.73),
+  FTI = c(0.42, 0.65)
+)
+
+#vores tal på Baums periode og på alle vores data
+df_r2_kor_baum_periode <- baum_tabel(df_fti_vaekst[df_fti_vaekst$kvartal <= 2016.25, ])   #2016K2 = 2016.25
+df_r2_kor_alle_kvartaler <- baum_tabel(df_fti_vaekst)
+
+nrow(df_fti_vaekst[df_fti_vaekst$kvartal <= 2016.25, ])   #skal være 66 kvartaler, som hos Baum
+
+df_baum_original
+df_r2_kor_baum_periode
+df_r2_kor_alle_kvartaler
+
+## er forspringet til DI-FTI blevet større eller mindre siden Baum? Sammenlign forskellen i R2 mellem de tre tabeller
+
+
+#plot: begge indikatorer og forbruget i samme figur
+#væksten er procent og indikatorerne er nettotal, så væksten får sin egen akse til højre
+skala <- max(abs(df_fti_vaekst$di_fti)) / max(abs(df_fti_vaekst$realvaekst))   #gør væksten lige så høj som indikatorerne
+
+r2_di <- summary(lm_di)$r.squared     #bruges i captionen
+r2_dst <- summary(lm_dst)$r.squared
+
+#tid til at bruge ggplot2
+library(ggplot2)
+
+ggplot(df_fti_vaekst, aes(x = kvartal)) +
+  geom_bar(aes(y = realvaekst * skala, fill = "Årlig realvækst i forbruget (højre akse)"),
+           stat = "identity", width = 0.2) +                            #søjler = forbrugets vækst
+  geom_line(aes(y = di_fti, color = "DI-FTI"), linewidth = 1) +         #linje = DI-FTI
+  geom_line(aes(y = dst_fti, color = "DST FTI"), linewidth = 1) +       #linje = DST FTI
+  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +  #nul-linje
+  geom_vline(xintercept = 2016.25, linetype = "dashed") +               #2016K2 = slutningen af Baums periode
+  annotate("text", x = 2016.25, y = max(df_fti_vaekst$di_fti), label = "2016K2 (Baum)",
+           hjust = 1.05, size = 3) +
+  scale_x_continuous(breaks = seq(2000, 2026, by = 2)) +
+  scale_y_continuous(name = "Nettotal",
+                     sec.axis = sec_axis(~ . / skala, name = "Pct.")) +   #den ekstra akse til højre
+  scale_fill_manual(name = NULL, values = c("Årlig realvækst i forbruget (højre akse)" = "pink")) +
+  scale_color_manual(name = NULL, values = c("DI-FTI" = "black", "DST FTI" = "darkgreen")) +
+  labs(x = NULL,
+       title = paste0("DI-FTI og DST FTI mod privatforbruget, 2000K1-", seneste_tekst),
+       caption = paste0("Forklaringsgrad (R²): DI-FTI ", round(r2_di, 2), ", DST FTI ", round(r2_dst, 2),
+                        ".\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
+  theme_classic() +
+  theme(legend.position = "top")
+
+## kig på plottet: hvad sker der i 2020 (Corona) og 2022 (inflation)? Det skal med i vurderingen
+
+
+#Corona og krig: er det dem der gør R2 lavere end hos Baum? Vi tester det og gætter ikke
+#funktion der regner R2 og korrelation på ét udsnit
+r2_kor_udsnit <- function(d, navn) {
+  data.frame(
+    Udsnit = navn,
+    Kvartaler = nrow(d),
+    R2_DI = round(summary(lm(realvaekst ~ di_fti, data = d))$r.squared, 2),
+    R2_DST = round(summary(lm(realvaekst ~ dst_fti, data = d))$r.squared, 2),
+    Kor_DI = round(cor(d$di_fti, d$realvaekst), 2),
+    Kor_DST = round(cor(d$dst_fti, d$realvaekst), 2)
+  )
+}
+
+#fire udsnit. 2020K1 = 2020.00 og 2022K4 = 2022.75
+df_alle <- df_fti_vaekst
+df_foer_corona <- df_fti_vaekst[df_fti_vaekst$kvartal <= 2019.75, ]                                  #2000K1-2019K4
+df_uden_krise <- df_fti_vaekst[df_fti_vaekst$kvartal < 2020 | df_fti_vaekst$kvartal > 2022.75, ]     #uden 2020K1-2022K4
+df_efter_krise <- df_fti_vaekst[df_fti_vaekst$kvartal >= 2023, ]                                     #2023K1 og frem
+
+df_r2_kor_udsnit <- rbind(
+  r2_kor_udsnit(df_alle, paste0("Alle data, 2000K1-", seneste_tekst)),
+  r2_kor_udsnit(df_foer_corona, "Før Corona, 2000K1-2019K4"),
+  r2_kor_udsnit(df_uden_krise, "Uden 2020K1-2022K4"),
+  r2_kor_udsnit(df_efter_krise, "Kun 2023K1 og frem")
+)
+df_r2_kor_udsnit
+
+nrow(df_alle) - nrow(df_uden_krise)   #skal være 12 kvartaler (2020K1-2022K4)
+
+## hvis R2 stiger tydeligt uden Corona og krig kan vi skrive det som forklaring, ellers er det en gætning
+
+
+#### Opgave 2.2 – Forudsigelser af forbruget ####
+#Beregn/forudsig den årlige realvækst i husholdningernes forbrugsudgift for 3. kvartal 2023 med
+#henholdsvis DI’s forbrugertillidsindikator og forbrugertillidsindikatoren fra DST.
+
+## gruppen har valgt 3. kvartal 2026 som hovedforudsigelse, fordi den er ægte: forbruget er ikke offentliggjort endnu
+## 3. kvartal 2023 bruger vi bagefter som kontrol af metoden, fordi facit findes dér
+
+#2026K3 (= 2026.5) findes ikke i df_fti_vaekst, fordi vækst mangler. Tilliden findes i df_fti_kvartal
+df_x_2026k3 <- df_fti_kvartal[df_fti_kvartal$kvartal == 2026.5, ]
+df_x_2026k3   #di_fti og dst_fti for 2026K3
+
+#predict() sætter X ind i hver model og giver den forudsagte vækst
+pred_di_2026 <- predict(lm_di, newdata = df_x_2026k3)
+pred_dst_2026 <- predict(lm_dst, newdata = df_x_2026k3)
+
+pred_di_2026    #DI-FTI's forudsigelse for 2026K3
+pred_dst_2026   #DST FTI's forudsigelse for 2026K3
+
+#kontrol i hånden: skæring + hældning * X, skal give samme tal
+coef(lm_di)[1] + coef(lm_di)[2] * df_x_2026k3$di_fti
+coef(lm_dst)[1] + coef(lm_dst)[2] * df_x_2026k3$dst_fti
+
+#usikkerheden på forudsigelsen, 95 pct. interval
+predict(lm_di, newdata = df_x_2026k3, interval = "prediction")
+predict(lm_dst, newdata = df_x_2026k3, interval = "prediction")
+
+
+#kontrol af metoden på 2023K3, hvor facit findes
+#modellen må kun kende data til 2023K2, ellers har den set facit på forhånd
+df_til_2023 <- df_fti_vaekst[df_fti_vaekst$kvartal <= 2023.25, ]
+nrow(df_til_2023)   #skal være 94 kvartaler
+
+model_di_2023 <- lm(realvaekst ~ di_fti, data = df_til_2023)
+model_dst_2023 <- lm(realvaekst ~ dst_fti, data = df_til_2023)
+
+df_x_2023k3 <- df_fti_vaekst[df_fti_vaekst$kvartal == 2023.5, ]   #her har vi også facit (realvaekst)
+df_x_2023k3
+
+pred_di_2023 <- predict(model_di_2023, newdata = df_x_2023k3)
+pred_dst_2023 <- predict(model_dst_2023, newdata = df_x_2023k3)
+facit_2023 <- df_x_2023k3$realvaekst
+
+df_forudsagt_vs_facit <- data.frame(
+  Model = c("DI-FTI", "DST FTI"),
+  Forudsagt = round(c(pred_di_2023, pred_dst_2023), 2),
+  Facit = round(facit_2023, 2),
+  Afvigelse = round(c(pred_di_2023, pred_dst_2023) - facit_2023, 2)   #forudsagt minus facit
+)
+df_forudsagt_vs_facit
+
+## positiv afvigelse = modellen gættede for højt. Det er kun ét kvartal, så det er ikke en generel test
+
+
+#### Opgave 2.3 – Salg resten af året ####
+#Med afsæt i jeres forudsigelse fra opgave 2.2, ville I så være bekymrede for virksomhedernes salg
+#til hr. og fru Danmark resten af året. Giv en uddybende forklaring på jeres svar.
+
+#hvor stor har væksten været for nylig? Referencen for om forudsigelsen er meget eller lidt
+df_fti_vaekst[df_fti_vaekst$kvartal >= 2025.75, c("kvartal", "realvaekst")]
+
+#gættede modellen for lavt eller for højt de seneste kvartaler? (fejl = faktisk minus gæt)
+seneste_kvartaler <- df_fti_vaekst$kvartal >= 2025.5   #2025K3 og frem
+df_seneste_gaet <- data.frame(
+  kvartal = df_fti_vaekst$kvartal[seneste_kvartaler],
+  faktisk = round(df_fti_vaekst$realvaekst[seneste_kvartaler], 2),
+  gaet_di = round(fitted(lm_di)[seneste_kvartaler], 2),
+  fejl_di = round(resid(lm_di)[seneste_kvartaler], 2)
+)
+df_seneste_gaet
+
+mean(resid(lm_di)[seneste_kvartaler])   #positiv = modellen gætter for lavt de seneste kvartaler
+
+#og i kvartaler hvor forbruget faldt: gætter modellen for højt eller lavt?
+mean(resid(lm_di)[df_fti_vaekst$realvaekst < 0])   #negativ = gættede for højt, altså undervurderede faldet
+
+## svaret skal bruge både punktforudsigelsen, det brede interval fra 2.2 og fejlene fra de seneste kvartaler
+
+
+#### Opgave 2.4 – Prognoser fra DI og Nationalbanken ####
+#Hvor stor realvækst i privatforbruget forventer DI og Nationalbanken i deres seneste prognoser?
+#Sammenhold deres tal med jeres svar i opgave 2.3.
+
+## tjek begge tal og datoer i kilderne før aflevering, og om DI har en nyere prognose end maj
+di_2026 <- 1.8   #DI, prognose maj 2026
+nb_2026 <- 1.8   #Nationalbanken, prognose sep. 2026
+
+#kvartalernes årlige vækst i 2026. 2026K1 = 2026.00 og 2026K2 = 2026.25
+vaekst_k1_2026 <- df_fti_vaekst$realvaekst[df_fti_vaekst$kvartal == 2026]
+vaekst_k2_2026 <- df_fti_vaekst$realvaekst[df_fti_vaekst$kvartal == 2026.25]
+vaekst_k3_2026 <- as.numeric(pred_di_2026)   #vores forudsigelse fra 2.2 (DI-FTI)
+
+#K4 kender vi ikke, så vi antager at væksten er gennemsnittet af de tre første
+vaekst_k4_antaget <- mean(c(vaekst_k1_2026, vaekst_k2_2026, vaekst_k3_2026))
+
+#årsvæksten er cirka gennemsnittet af de fire kvartalers årlige vækst
+aarsvaekst_antaget <- mean(c(vaekst_k1_2026, vaekst_k2_2026, vaekst_k3_2026, vaekst_k4_antaget))
+
+#hvad skal K4 være, for at året ender på DI's tal? Fire kvartaler gange DI's tal minus de tre vi har
+vaekst_k4_krav <- 4 * di_2026 - (vaekst_k1_2026 + vaekst_k2_2026 + vaekst_k3_2026)
+
+df_k4_antaget_vs_krav <- data.frame(
+  Kvartal = c("2026K1", "2026K2", "2026K3 (forudsigelse)", "2026K4 (antaget)", "2026K4 (krav for at nå DI's tal)"),
+  Vaekst = round(c(vaekst_k1_2026, vaekst_k2_2026, vaekst_k3_2026, vaekst_k4_antaget, vaekst_k4_krav), 2)
+)
+df_k4_antaget_vs_krav
+
+df_aarsvaekst_di_nb_model <- data.frame(
+  Kilde = c("DI (maj 2026)", "Nationalbanken (sep. 2026)", "Vores model"),
+  Aarsvaekst = c(di_2026, nb_2026, round(aarsvaekst_antaget, 2))
+)
+df_aarsvaekst_di_nb_model
+
+di_2026 - aarsvaekst_antaget   #hvor mange procentpoint ligger vores model under DI?
+
+## i rapporten: årsvæksten er en tilnærmelse (gennemsnit af kvartalernes vækst), 
+#og K4 er en antagelse, ikke en forudsigelse
+
+#### Opgave 3.1 – Modellens forudsigelser ####
+#Med udgangspunkt i jeres besvarelse i opgave 2, bedes I beregne jeres estimerede værdier for den
+#kvartalsvise årlige vækstrate i husholdningernes forbrug. (hint: I skal gange jeres estimerede
+#koefficienter med x-variablene fra den estimerede model).
+
+koef_di <- coef(lm_di)     #skæring og hældning fra DI-modellen
+koef_dst <- coef(lm_dst)   #skæring og hældning fra DST-modellen
+
+#skæring + hældning * x giver den estimerede vækst for hvert kvartal
+df_fti_vaekst$est_di <- koef_di[1] + koef_di[2] * df_fti_vaekst$di_fti
+df_fti_vaekst$est_dst <- koef_dst[1] + koef_dst[2] * df_fti_vaekst$dst_fti
+
+#kontrol: samme tal som R selv får?
+all.equal(as.numeric(df_fti_vaekst$est_di), as.numeric(fitted(lm_di)))     #skal give TRUE
+all.equal(as.numeric(df_fti_vaekst$est_dst), as.numeric(fitted(lm_dst)))   #skal give TRUE
+
+round(coef(lm_di), 3)    #tal til rapporten
+round(coef(lm_dst), 3)
+
+df_estimeret_vaekst <- data.frame(
+  Kvartal = df_fti_vaekst$kvartal,
+  Faktisk = round(df_fti_vaekst$realvaekst, 2),
+  Est_DI = round(df_fti_vaekst$est_di, 2),
+  Est_DST = round(df_fti_vaekst$est_dst, 2)
+)
+head(df_estimeret_vaekst)
+tail(df_estimeret_vaekst)
+
+
+#### Opgave 3.2 – Residualer ####
+#Med udgangspunkt i jeres besvarelse i opgave 3.1, bedes I beregne residualer for henholdsvis DI’s
+#og DST’s forbrugertillidsindikator og plot disse i forhold til jeres forudsagte resultater fra opgave
+#3.1 for de to modeller.
+
+#residual = det der faktisk skete minus det modellen gættede
+df_fti_vaekst$res_di <- df_fti_vaekst$realvaekst - df_fti_vaekst$est_di
+df_fti_vaekst$res_dst <- df_fti_vaekst$realvaekst - df_fti_vaekst$est_dst
+
+#kontrol: samme tal som R selv får?
+all.equal(as.numeric(df_fti_vaekst$res_di), as.numeric(resid(lm_di)))     #skal give TRUE
+all.equal(as.numeric(df_fti_vaekst$res_dst), as.numeric(resid(lm_dst)))   #skal give TRUE
+
+round(mean(df_fti_vaekst$res_di), 10)    #residualerne skal i snit være 0 (rundet, ellers kan R vise fx -9e-17, det er afrundingsstøj)
+round(mean(df_fti_vaekst$res_dst), 10)
+
+df_residualer <- data.frame(
+  Kvartal = df_fti_vaekst$kvartal,
+  Faktisk = round(df_fti_vaekst$realvaekst, 2),
+  Est_DI = round(df_fti_vaekst$est_di, 2),
+  Res_DI = round(df_fti_vaekst$res_di, 2),
+  Est_DST = round(df_fti_vaekst$est_dst, 2),
+  Res_DST = round(df_fti_vaekst$res_dst, 2)
+)
+head(df_residualer)
+tail(df_residualer)
+
+#to små hjælpefunktioner til captions
+komma <- function(x) format(round(x, 2), decimal.mark = ",")                      #tal med komma
+kvartal_tekst <- function(k) paste0(floor(k), "K", round((k - floor(k)) * 4) + 1)   #2021.25 bliver til 2021K2
+
+#kvartalet med den største fejl i hver model
+stoerste_di <- which.max(abs(df_fti_vaekst$res_di))
+stoerste_dst <- which.max(abs(df_fti_vaekst$res_dst))
+
+#tid til at bruge ggplot2
+library(ggplot2)
+
+#residualer mod modellens gæt. En god model giver punkter spredt tilfældigt omkring nul
+ggplot(df_fti_vaekst, aes(x = est_di, y = res_di)) +
+  geom_point(color = "black") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +   #nul = modellen ramte rigtigt
+  labs(x = "Estimeret vækst (DI-FTI), pct.", y = "Residual, procentpoint",
+       title = "Residualer mod estimerede værdier, DI-FTI",
+       caption = paste0("Residualernes standardafvigelse er ", komma(sd(df_fti_vaekst$res_di)),
+                        " procentpoint. Største fejl: ", kvartal_tekst(df_fti_vaekst$kvartal[stoerste_di]),
+                        " (", komma(df_fti_vaekst$res_di[stoerste_di]), ").\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
+  theme_classic()
+
+ggplot(df_fti_vaekst, aes(x = est_dst, y = res_dst)) +
+  geom_point(color = "darkgreen") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +
+  labs(x = "Estimeret vækst (DST FTI), pct.", y = "Residual, procentpoint",
+       title = "Residualer mod estimerede værdier, DST FTI",
+       caption = paste0("Residualernes standardafvigelse er ", komma(sd(df_fti_vaekst$res_dst)),
+                        " procentpoint. Største fejl: ", kvartal_tekst(df_fti_vaekst$kvartal[stoerste_dst]),
+                        " (", komma(df_fti_vaekst$res_dst[stoerste_dst]), ").\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
+  theme_classic()
+
+#ekstra: residualerne over tid. Hvis fejlene ligger i stribe over eller under nul, er de ikke tilfældige
+ggplot(df_fti_vaekst, aes(x = kvartal)) +
+  geom_point(aes(y = res_di, color = "DI-FTI")) +
+  geom_point(aes(y = res_dst, color = "DST FTI")) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +
+  scale_color_manual(name = NULL, values = c("DI-FTI" = "black", "DST FTI" = "darkgreen")) +
+  labs(x = NULL, y = "Residual, procentpoint",
+       title = "Residualer over tid",
+       caption = paste0("Gennemsnitlig fejl de seneste fire kvartaler: ", komma(mean(tail(df_fti_vaekst$res_di, 4))),
+                        " (DI-FTI) og ", komma(mean(tail(df_fti_vaekst$res_dst, 4))),
+                        " (DST FTI).\nPositiv = modellen gætter for lavt.\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +   #linjeskift, så captionen ikke klippes af
+  theme_classic() +
+  theme(legend.position = "top")
+
+#kvartaler med fejl over 3 procentpoint
+df_fti_vaekst[abs(df_fti_vaekst$res_di) > 3, c("kvartal", "realvaekst", "est_di", "res_di")]
+df_fti_vaekst[abs(df_fti_vaekst$res_dst) > 3, c("kvartal", "realvaekst", "est_dst", "res_dst")]
+
+sd(df_fti_vaekst$res_di)         #hvor meget bomber modellen typisk?
+sd(df_fti_vaekst$res_dst)
+sd(df_fti_vaekst$realvaekst)     #til sammenligning: hvor meget svinger selve væksten?
+
+
+#### Opgave 3.3 – RSS og TSS ####
+#Med udgangspunkt i jeres besvarelse i opgave 3.1, bedes I beregne residualer for henholdsvis DI’s
+#og DST’s forbrugertillidsindikator og plot disse i forhold til jeres forudsagte resultater fra opgave
+#3.1 for de to modeller.
+
+## opgaveteksten her er den samme som i 3.2 (formentlig en copy-paste-fejl), så vi svarer på det overskriften siger: RSS og TSS
+
+#RSS = alle modellens fejl (residualer) i anden og lagt sammen
+#TSS = alle udsving i væksten omkring dens eget gennemsnit, i anden og lagt sammen
+rss_di <- sum(df_fti_vaekst$res_di^2)
+rss_dst <- sum(df_fti_vaekst$res_dst^2)
+tss <- sum((df_fti_vaekst$realvaekst - mean(df_fti_vaekst$realvaekst))^2)
+
+#kontrol: samme tal som R selv får?
+all.equal(rss_di, sum(resid(lm_di)^2))     #skal give TRUE
+all.equal(rss_dst, sum(resid(lm_dst)^2))   #skal give TRUE
+
+df_rss_tss <- data.frame(
+  Maal = c("RSS (modellens fejl)", "TSS (udsving i væksten)"),
+  DI = round(c(rss_di, tss), 1),
+  DST = round(c(rss_dst, tss), 1)
+)
+df_rss_tss
+
+
+#### Opgave 3.4 – Forklaringsgraden ####
+#Opstil ligningen for forklaringsgraden og brug denne til at beregne forklaringsgraden for jeres
+#model i opgave 2.
+
+#R2 = 1 - RSS/TSS: hvor stor en del af udsvingene modellen fjerner
+r2_di <- 1 - rss_di / tss
+r2_dst <- 1 - rss_dst / tss
+
+#kontrol: samme tal som R selv får?
+all.equal(r2_di, summary(lm_di)$r.squared)     #skal give TRUE
+all.equal(r2_dst, summary(lm_dst)$r.squared)   #skal give TRUE
+
+df_forklaringsgrad <- data.frame(
+  Model = c("DI-FTI", "DST FTI"),
+  RSS = round(c(rss_di, rss_dst), 1),
+  TSS = round(c(tss, tss), 1),
+  R2 = round(c(r2_di, r2_dst), 2)
+)
+df_forklaringsgrad
+

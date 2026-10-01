@@ -550,7 +550,185 @@ aggregate(realvaekst ~ kvartal_nr, data = data_21, FUN = mean)
 
 
 
+#Tid til opgave 2.4. hvor vi skal udregne ud fra Danske nationalbank og DI's
+#OPGAVE 2.4
+end(p_forbrug_ts)   #skal give 2026 2
+pred_di_2026        #skal give ca. -0,27
+end(realvaekst_y)   #skal give 2026 2
+
+#Nu skal vi have fat i 2025, så vi kan sammenligne
+aar_2025 <- sum(window(p_forbrug_ts, start = c(2025, 1), end = c(2025, 4)))
+k3_2025  <- as.numeric(window(p_forbrug_ts, start = c(2025, 3), end = c(2025, 3)))
+k4_2025  <- as.numeric(window(p_forbrug_ts, start = c(2025, 4), end = c(2025, 4)))
+
+#næste step er at se på vækst og niveau
+k1_2026 <- as.numeric(window(p_forbrug_ts, start = c(2026, 1), end = c(2026, 1)))
+k2_2026 <- as.numeric(window(p_forbrug_ts, start = c(2026, 2), end = c(2026, 2)))
+
+vaekst_k1_2026 <- as.numeric(window(realvaekst_y, start = c(2026, 1), end = c(2026, 1)))
+vaekst_k2_2026 <- as.numeric(window(realvaekst_y, start = c(2026, 2), end = c(2026, 2)))
+#forudsigelse som niveau
+vaekst_k3_2026  <- as.numeric(pred_di_2026)
+k3_predict_2026 <- k3_2025 * (1 + vaekst_k3_2026 / 100)
+
+#NU skal vi finde ud af hvad K4 2026 skal være for at matche de 1,8 hos DI
+aar_2026_maal <- aar_2025 * 1.018
+k4_krav_2026  <- aar_2026_maal - k1_2026 - k2_2026 - k3_predict_2026
+vaekst_k4_krav <- (k4_krav_2026 / k4_2025 - 1) * 100
+vaekst_k4_krav   #krævet årlig vækst i K4, pct.
+
+#hvor lander k4 og hvad er antaget
+vaekst_k4_antaget <- mean(c(vaekst_k1_2026, vaekst_k2_2026, vaekst_k3_2026))
+k4_antaget_2026   <- k4_2025 * (1 + vaekst_k4_antaget / 100)
+
+aarsvaekst_antaget <- ((k1_2026 + k2_2026 + k3_predict_2026 + k4_antaget_2026) / aar_2025 - 1) * 100
+aarsvaekst_antaget   #sammenlign med DI's 1,8
+
+#lad os samle i en model
+tabel_24 <- data.frame(
+  Kvartal = c("2026K1", "2026K2", "2026K3 (predict)", "2026K4 (antaget)", "2026K4 (krav for 1,8)"),
+  Vaekst  = round(c(vaekst_k1_2026, vaekst_k2_2026, vaekst_k3_2026,
+                    vaekst_k4_antaget, vaekst_k4_krav), 2)
+)
+tabel_24
+round(aarsvaekst_antaget, 2)
+
+#Yayyyy model tid
+#Nu skal vi have fat i hvad DI og Nationalbanken forventer, så vi kan sammenligne
+#begge har skrevet det samme tal for privatforbruget i 2026
+di_2026 <- 1.8   #DI, prognose maj 2026
+nb_2026 <- 1.8   #Nationalbanken, prognose sep. 2026
+
+#samlet oversigt: hvad forventer de, hvad siger vores model, og hvad kræver det af K4
+tabel_sammenligning <- data.frame(
+  Kilde      = c("DI (maj 2026)", "Nationalbanken (sep. 2026)", "Vores model"),
+  Aarsvaekst = c(di_2026, nb_2026, round(aarsvaekst_antaget, 2))
+)
+tabel_sammenligning
+
+#hvor langt er vi fra dem?
+di_2026 - aarsvaekst_antaget   #forskel i procentpoint, skal give ca. 0,57
 
 
+#Opgave 3.1
+#vi har allerede modellerne fra opgave 2, nu gør vi det som regressionen selv gør, i hånden
+koef_di  <- coef(lm_di)
+koef_dst <- coef(lm_dst)
+
+#skæring + hældning * x giver den estimerede vækst for hvert kvartal
+data_21$est_di  <- koef_di[1]  + koef_di[2]  * data_21$di_fti
+data_21$est_dst <- koef_dst[1] + koef_dst[2] * data_21$dst_fti
+
+#kontrol: samme tal som R selv får?
+all.equal(as.numeric(data_21$est_di),  as.numeric(fitted(lm_di)))    #skal give TRUE
+all.equal(as.numeric(data_21$est_dst), as.numeric(fitted(lm_dst)))   #skal give TRUE
+
+head(data_21[, c("kvartal", "realvaekst", "est_di", "est_dst")])
+
+#tal til besvarelsen: koefficienter og et udsnit af de estimerede værdier
+round(coef(lm_di), 3)
+round(coef(lm_dst), 3)
+
+#lad os fyre det ind i et lækkert dataframe
+tabel_beregnet_3.1 <- data.frame(
+  Kvartal = data_21$kvartal,
+  Faktisk = round(data_21$realvaekst, 2),
+  Est_DI  = round(data_21$est_di, 2),
+  Est_DST = round(data_21$est_dst, 2)
+)
+head(tabel_beregnet_3.1)
+tail(tabel_beregnet_3.1)
 
 
+#OPGAVE 3.2 - residualer
+#residual = det der faktisk skete minus det modellen gættede
+data_21$res_di  <- data_21$realvaekst - data_21$est_di
+data_21$res_dst <- data_21$realvaekst - data_21$est_dst
+
+#kontrol: samme tal som R selv får?
+all.equal(as.numeric(data_21$res_di),  as.numeric(resid(lm_di)))    #skal give TRUE
+all.equal(as.numeric(data_21$res_dst), as.numeric(resid(lm_dst)))   #skal give TRUE
+
+#residualerne skal i snit være 0, ellers er noget galt
+mean(data_21$res_di)
+mean(data_21$res_dst)
+
+#samlet tabel, samme opsætning som 3.1
+tabel_residualer_3.2 <- data.frame(
+  Kvartal     = data_21$kvartal,
+  Faktisk     = round(data_21$realvaekst, 2),
+  Est_DI      = round(data_21$est_di, 2),
+  Res_DI      = round(data_21$res_di, 2),
+  Est_DST     = round(data_21$est_dst, 2),
+  Res_DST     = round(data_21$res_dst, 2)
+)
+head(tabel_residualer_3.2)
+tail(tabel_residualer_3.2)
+
+#nu skal vi se residualerne, og for at kunne se om modellen gætter skævt plotter vi dem mod modellens gæt
+#en god model giver punkter spredt tilfældigt omkring nul
+
+ggplot(data_21, aes(x = est_di, y = res_di)) +
+  geom_point(color = "black") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +
+  labs(x = "Estimeret vækst (DI-FTI), pct.", y = "Residual, procentpoint",
+       title = "Residualer mod estimerede værdier, DI-FTI",
+       caption = paste0("DI-modellens fejl er store og uden fast mønster: skyen er bred, og Corona-genåbningen (2021K2) misser med +8,1.\n",
+                        "Kilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
+  theme_minimal()
+
+ggplot(data_21, aes(x = est_dst, y = res_dst)) +
+  geom_point(color = "darkgreen") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +
+  labs(x = "Estimeret vækst (DST FTI), pct.", y = "Residual, procentpoint",
+       title = "Residualer mod estimerede værdier, DST FTI",
+       caption = paste0("DST-modellens fejl er store og uden fast mønster: skyen er bred, og Corona-genåbningen (2021K2) misser med +8,1.\n",
+                        "Kilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
+  theme_minimal()
+
+#hvilke kvartaler ligger allerlangst fra nul?
+data_21[abs(data_21$res_di) > 3, c("kvartal", "realvaekst", "est_di", "res_di")]
+data_21[abs(data_21$res_dst) > 3, c("kvartal", "realvaekst", "est_dst", "res_dst")]
+
+#hvor meget bomber modellen typisk? (standardafvigelse af residualerne)
+sd(data_21$res_di)
+sd(data_21$res_dst)
+
+#til sammenligning: hvor meget svinger selve væksten?
+sd(data_21$realvaekst)
+
+#OPGAVE 3.3 - RSS og TSS
+#RSS = alle modellens fejl (residualer) i anden og lagt sammen
+#TSS = alle udsving i væksten omkring dens eget gennemsnit, i anden og lagt sammen
+rss_di  <- sum(data_21$res_di^2)
+rss_dst <- sum(data_21$res_dst^2)
+tss     <- sum((data_21$realvaekst - mean(data_21$realvaekst))^2)
+
+#kontrol: samme tal som R selv får?
+all.equal(rss_di,  sum(resid(lm_di)^2))    #skal give TRUE
+all.equal(rss_dst, sum(resid(lm_dst)^2))   #skal give TRUE
+
+#samlet tabel, samme opsætning som før
+tabel_rss_tss_3.3 <- data.frame(
+  Maal  = c("RSS (modellens fejl)", "TSS (udsving i væksten)"),
+  DI    = round(c(rss_di,  tss), 1),
+  DST   = round(c(rss_dst, tss), 1)
+)
+tabel_rss_tss_3.3
+
+#OPGAVE 3.4 - forklaringsgraden
+#R2 = 1 - RSS/TSS: hvor stor en del af udsvingene modellen fjerner
+r2_di  <- 1 - rss_di  / tss
+r2_dst <- 1 - rss_dst / tss
+
+#kontrol: samme tal som R selv får?
+all.equal(r2_di,  summary(lm_di)$r.squared)    #skal give TRUE
+all.equal(r2_dst, summary(lm_dst)$r.squared)   #skal give TRUE
+
+tabel_forklaringsgrad_3.4 <- data.frame(
+  Model = c("DI-FTI", "DST FTI"),
+  RSS   = round(c(rss_di, rss_dst), 1),
+  TSS   = round(c(tss, tss), 1),
+  R2    = round(c(r2_di, r2_dst), 2)
+)
+tabel_forklaringsgrad_3.4

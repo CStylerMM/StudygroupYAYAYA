@@ -7,7 +7,7 @@
 #tid til at bruge dkstat
 library(dkstat)
 
-dst_search(string = "byområde", field = "text")   #søger i DST's tabeller efter ordet "byområde", her fandt vi BY3
+dst_search(string = "Befolkning", field = "text")   #søger i DST's tabeller efter ordet "byområde", her fandt vi BY3
 
 by3_meta <- dst_meta(table = "BY3", lang = "da")   #henter beskrivelsen af BY3
 by3_meta$variables                                 #viser hvilke variable vi kan vælge på
@@ -21,65 +21,65 @@ df_byer_folketal <- dst_get_data(
   lang = "da"
 )
 
+#Nu renser vi. så vi kan arbejde videre med det i opg 1.2
 sum(df_byer_folketal$value)   #samlet folketal før vi renser, så vi kan sammenligne bagefter
+# 6025603 før vi renser
 
 #vi renser: det der ikke er en by skal ud
 df_byer_renset <- df_byer_folketal[df_byer_folketal$value != 0, ]                 #fjerner rækker med 0 indbyggere
 df_byer_renset <- df_byer_renset[!grepl("Uden fast bopæl", df_byer_renset$BYER), ]  #fjerner "Uden fast bopæl", det er ikke en by
 df_byer_renset <- df_byer_renset[!grepl("Landdistrikter", df_byer_renset$BYER), ]   #fjerner landdistrikter, det er heller ikke en by
 
-nrow(df_byer_renset)                                               #antal rækker tilbage
-sum(df_byer_renset$value)                                          #folketal i byerne efter rensning
-1 - sum(df_byer_renset$value) / sum(df_byer_folketal$value) #andel af folketallet vi har fjernet
+nrow(df_byer_renset)                                               #antal rækker tilbage 1419, der var før 1821
+sum(df_byer_renset$value)  #folketal i byerne efter rensning: 5342281
+sum(df_byer_folketal$value) - sum(df_byer_renset$value)  #antal mennesker vi har fjernet: 683322
+sum(df_byer_renset$value) / sum(df_byer_folketal$value)  #andel af folketallet der er tilbage, ca. 0,887
 
 
 #### Opgave 1.2 – Kategori-variabel. ####
 #Lav en kategorivariabel i R hvor du skal inddele byerne i følgende kategorier: "landsby","lille by",
 #"almindelig by", "større by", "storby" ud fra et interval på indbyggertal som du selv definerer.
 
+#Før vi kan lave en kategorivariable så skal vi sgu lige rense så det ser rigtigt ud.
 #navnene i DST og boligdata skal være ens før vi kan merge, så vi laver en rense-funktion
 rens_by <- function(x) {
-  x <- tolower(x)                     #alt til små bogstaver
-  x <- gsub("\\s*\\(.*?\\)", "", x)   #fjerner alt i parentes
-  x <- gsub("[0-9]", "", x)           #fjerner tal
-  x <- gsub("æ", "ae", x)             #æ, ø, å og é skrives om, så navnene matcher
+  x <- tolower(x)  #alt til små bogstaver
+  x <- ifelse(grepl("hovedstad", x), "københavn", x)  #alt med hovedstadsområdet bliver til københavn, skal stå før parentesen fjernes
+  x <- gsub("\\s*\\(.*?\\)", "", x)  #fjerner alt i parentes, fx "(del af flere kommuner)"
+  x <- gsub("[0-9]", "", x)  #fjerner tallene foran bynavnet
+  x <- gsub("æ", "ae", x)  #æ, ø, å og é skrives om, så navnene matcher
   x <- gsub("ø", "oe", x)
   x <- gsub("å", "aa", x)
   x <- gsub("é", "e", x)
-  x <- gsub("-", " ", x)              #bindestreg bliver til mellemrum
-  trimws(x)                           #fjerner mellemrum i enderne
+  x <- gsub("-", " ", x)  #bindestreg bliver til mellemrum
+  trimws(x)  #fjerner mellemrum i enderne
 }
 
-df_byer_renset$by <- rens_by(df_byer_renset$BYER)   #ny kolonne "by" med rensede navne
-head(df_byer_renset[, c("BYER", "by")])                    #tjek at navnene ser rigtige ud
+df_byer_renset$by <- rens_by(df_byer_renset$BYER)  #ny kolonne "by" med rensede navne
+head(df_byer_renset[, c("BYER", "by")])  #tjek at navnene ser rigtige ud
+df_byer_renset[grepl("hovedstad", tolower(df_byer_renset$BYER)), c("BYER", "by")]  #tjek: er alle hovedstadsrækkerne blevet til københavn?
 
 #nogle byer ligger i flere kommuner og står derfor flere gange
 dubletter <- df_byer_renset$by[duplicated(df_byer_renset$by)]
-df_byer_renset[df_byer_renset$by %in% dubletter, c("BYER", "value")]   #tjek: er det samme by delt over kommuner, eller to byer med samme navn?
+df_byer_renset[df_byer_renset$by %in% dubletter, c("BYER", "value")]  #tjek: er det samme by delt over kommuner, eller to byer med samme navn?
 
-df_byer_bycat <- aggregate(value ~ by, data = df_byer_renset, FUN = sum)   #lægger delene sammen, så hver by står én gang
-names(df_byer_bycat) <- c("by", "folketal")                                       #giver kolonnen et navn der siger noget
-sum(duplicated(df_byer_bycat$by))                                                 #skal være 0
+df_byer_bycat <- aggregate(value ~ by, data = df_byer_renset, FUN = sum)  #lægger delene sammen, så hver by står én gang
+names(df_byer_bycat) <- c("by", "folketal")  #giver kolonnen et navn der siger noget
+sum(duplicated(df_byer_bycat$by))  #skal være 0
+sum(df_byer_bycat$folketal) == sum(df_byer_renset$value)  #skal være TRUE, ellers er der røget nogen undervejs
 
-#grænserne har vi selv valgt. DST tæller kun bebyggelser fra 200 indbyggere som by, så "landsby" er sat til under 1.000
-df_byer_bycat$bycat <- ifelse(
-  df_byer_bycat$folketal < 1000, "landsby",
-  ifelse(
-    df_byer_bycat$folketal < 5000, "lille by",
-    ifelse(
-      df_byer_bycat$folketal < 20000, "almindelig by",
-      ifelse(
-        df_byer_bycat$folketal < 100000, "større by",
-        "storby"
-      )
-    )
-  )
-)
+#Lav en kategorivariabel: inddeler byerne ud fra indbyggertal
+df_byer_bycat$bycat <- ifelse(df_byer_bycat$folketal < 1000, "landsby",  #under 1.000 indbyggere
+                              ifelse(df_byer_bycat$folketal < 5000, "lille by",  #1.000 til 4.999
+                                     ifelse(df_byer_bycat$folketal < 20000, "almindelig by",  #5.000 til 19.999
+                                            ifelse(df_byer_bycat$folketal < 100000, "større by",  #20.000 til 99.999
+                                                   "storby"))))  #100.000 og op
 
-table(df_byer_bycat$bycat)   #antal byer i hver kategori, alle fem skal have byer
+table(df_byer_bycat$bycat)  #antal byer i hver kategori, alle fem skal have byer
 
-## husk at begrunde grænserne i rapporten, de skal kunne forsvares
-
+## 
+## DST tæller kun bebyggelser fra 200 indbyggere som by, så "landsby" er sat til under 1.000
+## alt i hovedstadsområdet er slået sammen til københavn, skal nævnes i rapporten
 
 #### Opgave 1.3 – Merge de to dataframes ####
 #Indlæs filen med boliger og tilpas de to dataframes så du kan merge de to sammen via variablen ”by”
@@ -88,29 +88,29 @@ table(df_byer_bycat$bycat)   #antal byer i hver kategori, alle fem skal have bye
 #tid til at bruge readxl
 library(readxl)
 
-df_bolig_raa <- read_excel("Ida Rstudio Projekter/OLA 1/boligsiden OLA.xlsx", skip = 1)   #stien starter fra projektmappen
+df_bolig_raa <- read_excel("Ida Rstudio Projekter/OLA 1/boligsiden OLA.xlsx", skip = 1)  #stien starter fra projektmappen
 
-df_bolig_raa[df_bolig_raa == "NA"] <- NA      #teksten "NA" bliver til rigtige NA
-df_bolig_renset <- na.omit(df_bolig_raa)      #fjerner alle rækker med mindst én NA
+df_bolig_raa[df_bolig_raa == "NA"] <- NA  #teksten "NA" bliver til rigtige NA
+df_bolig_renset <- na.omit(df_bolig_raa)  #fjerner alle rækker med mindst én NA
 
-nrow(df_bolig_raa)       #antal boliger før
-nrow(df_bolig_renset)    #antal boliger efter, forskellen skal med i rapporten
+nrow(df_bolig_raa)  #antal boliger før
+nrow(df_bolig_renset)  #antal boliger efter, forskellen skal med i rapporten
 
 #tre boliger har postnummer og by byttet om. Tjek først at det er de rigtige rækker
 df_bolig_renset[c(264, 1740, 2031), c("postnr", "by")]
 
-df_bolig_renset$postnr[264] <- as.numeric(df_bolig_renset$by[264])     #byen stod i postnr-kolonnen
+df_bolig_renset$postnr[264] <- as.numeric(df_bolig_renset$by[264])  #byen stod i postnr-kolonnen
 df_bolig_renset$postnr[1740] <- as.numeric(df_bolig_renset$by[1740])
 df_bolig_renset$postnr[2031] <- as.numeric(df_bolig_renset$by[2031])
 
-df_bolig_renset$by[264] <- "moeldrup"      #og den rigtige by sættes ind
+df_bolig_renset$by[264] <- "moeldrup"  #og den rigtige by sættes ind
 df_bolig_renset$by[1740] <- "kibaek"
 df_bolig_renset$by[2031] <- "hilleroed"
 
 #alle tal-kolonner skal være tal, ellers kan vi ikke regne på dem
 tal_kolonner <- c("pris", "opført", "kvmpris", "størrelse", "mdudg", "grund", "værelser", "postnr", "vejnr")
 for (kol in tal_kolonner) {
-  df_bolig_renset[[kol]] <- as.numeric(df_bolig_renset[[kol]])   #laver kolonnen om til tal
+  df_bolig_renset[[kol]] <- as.numeric(df_bolig_renset[[kol]])  #laver kolonnen om til tal
 }
 
 #liggetid har bogstaver i ("dage"), så de skal fjernes før det bliver til tal
@@ -144,7 +144,10 @@ find_region <- function(postnr) {
   return(retval)
 }
 
-df_bolig_renset$region <- sapply(df_bolig_renset$postnr, find_region)   #kører funktionen på hver bolig
+df_bolig_renset$region <- NA  #tom kolonne at fylde ud
+for (i in 1:nrow(df_bolig_renset)) {
+  df_bolig_renset$region[i] <- find_region(df_bolig_renset$postnr[i])  #kører funktionen på bolig nummer i
+}
 
 #bynavnene i boligdata renses med samme funktion som DST-data
 df_bolig_renset$by <- rens_by(df_bolig_renset$by)
@@ -152,55 +155,56 @@ df_bolig_renset$by <- rens_by(df_bolig_renset$by)
 #postdistrikt-bogstaver ("aarhus c", "koebenhavn k") bruger DST ikke, så de fjernes i enden af navnet
 df_bolig_renset$by <- sub(" (c|k|v|n|s|m|sv|nv|oe|soe|noe)$", "", df_bolig_renset$by)
 
-
-#### Opgave 1.4 – Plot ####
-#Din merge skal producere en dataframe og et plot, som minder om det du ser nedenfor - men den
-#præcise udformning kommer naturligvis an på hvilken inddeling du vælger.
-
 #merge på "by": boligdata til venstre, bycat og folketal fra DST til højre
 df_bolig_bycat <- merge(
   df_bolig_renset[, c("by", "pris", "kvmpris", "region")],
   df_byer_bycat[, c("by", "bycat", "folketal")],
   by = "by",
-  all.x = TRUE      #beholder alle boliger, også dem uden match i DST
+  all.x = TRUE  #beholder alle boliger, også dem uden match i DST
 )
 
-nrow(df_bolig_renset) == nrow(df_bolig_bycat)   #skal være TRUE, ellers har merge ganget boliger op
+nrow(df_bolig_renset) == nrow(df_bolig_bycat)  #skal være TRUE, ellers har merge ganget boliger op
 
-sum(is.na(df_bolig_bycat$bycat))   #boliger uden match i DST
-head(sort(table(df_bolig_bycat$by[is.na(df_bolig_bycat$bycat)]), decreasing = TRUE), 25)   #de byer der oftest mangler match
+sum(is.na(df_bolig_bycat$bycat))  #boliger uden match i DST, tallet skal med i rapporten
+head(sort(table(df_bolig_bycat$by[is.na(df_bolig_bycat$bycat)]), decreasing = TRUE), 25)  #de byer der oftest mangler match
 
-df_bolig_bycat <- na.omit(df_bolig_bycat)   #først nu fjerner vi boliger uden bycat
-nrow(df_bolig_bycat)                               #boliger tilbage til plottet
+df_bolig_bycat <- df_bolig_bycat[!is.na(df_bolig_bycat$bycat), ]  #først nu fjerner vi boliger uden bycat
+nrow(df_bolig_bycat)  #boliger tilbage til plottet
+
+
+#### Opgave 1.4 – Plot ####
+#Din merge skal producere en dataframe og et plot, som minder om det du ser nedenfor - men den
+#præcise udformning kommer naturligvis an på hvilken inddeling du vælger.
 
 #dataframe til plottet: gennemsnitlig kvm-pris og antal boliger pr. bykategori
 df_kvmpris_bycat <- aggregate(kvmpris ~ bycat, data = df_bolig_bycat, FUN = mean)
 df_antal_bycat <- aggregate(kvmpris ~ bycat, data = df_bolig_bycat, FUN = length)
-df_kvmpris_bycat$antal <- df_antal_bycat$kvmpris   #kategorierne står i samme rækkefølge i begge, så antal kan lægges på
+df_kvmpris_bycat$antal <- df_antal_bycat$kvmpris  #kategorierne står i samme rækkefølge i begge, så antal kan lægges på
 
 #så søjlerne kommer i størrelsesorden i stedet for alfabetisk
 df_kvmpris_bycat$bycat <- factor(df_kvmpris_bycat$bycat,
                                  levels = c("landsby", "lille by", "almindelig by", "større by", "storby"))
 
 #kategorierne med højest og lavest kvm-pris, bruges i captionen
-hoejeste <- df_kvmpris_bycat$bycat[which.max(df_kvmpris_bycat$kvmpris)]
-laveste <- df_kvmpris_bycat$bycat[which.min(df_kvmpris_bycat$kvmpris)]
+hoejeste <- df_kvmpris_bycat$bycat[df_kvmpris_bycat$kvmpris == max(df_kvmpris_bycat$kvmpris)]  #kategorien med højest pris
+laveste <- df_kvmpris_bycat$bycat[df_kvmpris_bycat$kvmpris == min(df_kvmpris_bycat$kvmpris)]  #kategorien med lavest pris
 
 #tid til at bruge ggplot2
 library(ggplot2)
 
+forskel_pct <- round((max(df_kvmpris_bycat$kvmpris) / min(df_kvmpris_bycat$kvmpris) - 1) * 100)  #hvor mange procent højeste er over laveste
+
 ggplot(df_kvmpris_bycat, aes(x = bycat, y = kvmpris)) +
-  geom_bar(stat = "identity", fill = "pink", width = 0.7) +   #søjlerne får den højde vi selv har regnet
-  geom_text(aes(label = paste0(round(kvmpris), " kr.\n(n = ", antal, ")")), vjust = -0.3, size = 3.5) +   #pris og antal over søjlen
-  ylim(0, max(df_kvmpris_bycat$kvmpris) * 1.15) +      #plads over søjlerne til teksten
+  geom_bar(stat = "identity", fill = "pink", width = 0.7) +  #søjlerne får den højde vi selv har regnet
+  geom_text(aes(label = paste0(round(kvmpris), " kr.\n(n = ", antal, ")")), vjust = -0.3, size = 3.5) +  #pris og antal over søjlen
+  scale_y_continuous(limits = c(0, 30000), expand = c(0, 0)) +  #aksen går fra 0 til 30.000 kr. pr. m²
   labs(title = "Gennemsnitlig pris pr. m² efter bykategori",
        subtitle = "Boliger til salg, byer kategoriseret efter DST's byområder 2026",
        x = "Bykategori", y = "Kr. pr. m²",
-       caption = paste0("Højeste pris pr. m²: ", hoejeste, " (", round(max(df_kvmpris_bycat$kvmpris)),
-                        " kr.). Laveste: ", laveste, " (", round(min(df_kvmpris_bycat$kvmpris)),
+       caption = paste0(hoejeste, " har den højeste pris pr. m² (", round(max(df_kvmpris_bycat$kvmpris)),
+                        " kr.), ", forskel_pct, " % over laveste, ", laveste, " (", round(min(df_kvmpris_bycat$kvmpris)),
                         " kr.).\nKilde: Boligsiden og Danmarks Statistik (BY3)")) +
-  theme_classic()   #rent tema: hvid baggrund, ingen gitterlinjer
-
+  theme_bw()  #hvid baggrund med gitterlinjer og ramme
 ## vi vender tilbage og ser på hvorfor kategorierne koster det de gør
 
 

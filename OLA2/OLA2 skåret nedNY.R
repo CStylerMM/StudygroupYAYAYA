@@ -749,3 +749,959 @@ df_forklaringsgrad <- data.frame(
 )
 df_forklaringsgrad
 
+
+
+### --- Opgave 4 --- ###
+
+### Opgave 4.1 - Illustration af forbrugertillid
+# Hent data for forbrugertillidsundersøgelsen fra januar 1996 til i dag og omregn jeres data til
+# kvartaler. Lav en grafisk illustration af jeres omregnede data for DST’s forbrugertillidsindikator og
+# kommentér på, hvornår de danske forbrugere er mest og mindst optimistiske.
+
+#Hente forbrugertillidsundersøgelsen ned via API
+
+library(dkstat)
+
+# Hente meta data
+FORV1 <- dst_meta(table = "FORV1", lang = "da")
+
+# Explore variable
+FORV1$variables # Kategorierne/Variablerne vi skal filtrere i
+FORV1$values$INDIKATOR # Deres værdier
+FORV1$values$Tid # Deres værdier
+
+# Laver query liste
+filter_FORV1 <- list( INDIKATOR = "Forbrugertillidsindikatoren",
+                      Tid = "*")
+
+# Hente data ned og putte den i dataframe
+fTillid_raw <- dst_get_data(table = "FORV1",
+                            query = filter_FORV1,
+                            meta_data = FORV1,
+                            lang = "da")
+
+# Lave subset fra 1996
+fTillid <- fTillid_raw[fTillid_raw$TID >= as.Date("1996-01-01"), ]
+
+# Kun tallene (value-kolonnen) skal ind i tidsserien, ikke hele data framen
+ftillid_ts <- ts(fTillid$value, start = c(1996, 1), frequency = 12)
+
+# Omregn til kvartaler (gennemsnit af 3 måneder)
+ftillid_kvt_ts <- aggregate(ftillid_ts, nfrequency = 4)/3
+
+# Lave til data frame
+ftillid_kvt_df <- data.frame(
+  Tidsinterval = paste0(floor(time(ftillid_kvt_ts)), "K", cycle(ftillid_kvt_ts)),
+  Forbrugertillid = round(as.numeric(ftillid_kvt_ts), 1))
+
+# Plotte det
+library(ggplot2)
+ggplot(ftillid_kvt_df, aes(x = Tidsinterval, y = Forbrugertillid, group = 1)) +
+  geom_line(colour = "hotpink4") +
+  scale_x_discrete(breaks = ftillid_kvt_df$Tidsinterval[seq(1, nrow(ftillid_kvt_df), by = 8)]) +
+  labs(title = "DST's forbrugertillidsindikator",
+       subtitle = "Kvartalsvise gennemsnit, 1996 til i dag",
+       x = NULL, y = "Nettotal", caption = "Kilde: Danmarks Statistik & Egne beregninger") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+
+# Finde den største og mindste forbrugertillid
+største_række <- ftillid_kvt_df[which.max(ftillid_kvt_df$Forbrugertillid), ]
+største_række
+
+mindste_række <- ftillid_kvt_df[which.min(ftillid_kvt_df$Forbrugertillid), ]
+mindste_række
+
+# "Forbedret" chat graf
+# Sætte punkter på med størst om mindst tillid ^^^
+punkter_ftillid_kvt_df <- data.frame(
+  Tidsinterval = c("2006K1", "2022K4"),
+  Forbrugertillid = c(12.6, -32.1),
+  Tekst = c("Maks: 12.6 (2006K1)", "Min: -32.1 (2022K4)")
+)
+
+# Plotte det :))
+ggplot(ftillid_kvt_df, aes(x = Tidsinterval, y = Forbrugertillid, group = 1)) +
+  geom_line(colour = "hotpink4", linewidth = 1) +
+  geom_point(data = punkter_ftillid_kvt_df, aes(x = Tidsinterval, y = Forbrugertillid), color = "hotpink3", size = 4) +
+  geom_text(
+    data = punkter_ftillid_kvt_df, 
+    aes(x = Tidsinterval, y = Forbrugertillid, label = Tekst),
+    vjust = c(-1.2, 1.8), 
+    fontface = "bold",
+    size = 5.5
+  ) +
+  scale_x_discrete(breaks = ftillid_kvt_df$Tidsinterval[seq(1, nrow(ftillid_kvt_df), by = 8)]) +
+  labs(
+    title = "DST's forbrugertillidsindikator over tid",
+    subtitle = "Kvartalsvise gennemsnit, 1996 til 2026 2. kvartal",
+    x = NULL, 
+    y = "Nettotal", 
+    caption = "Kilde: Danmarks Statistik & Egne beregninger"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 30, face = "bold"),
+    plot.subtitle = element_text(size = 20, margin = margin(b = 15)),
+    plot.caption = element_text(size = 15, face = "italic", margin = margin(t = 20)),
+    axis.title.y = element_text(size = 14, face = "bold", margin = margin(r = 10)),
+    axis.text.x = element_text(angle = 60, hjust = 1, size = 12, face = "bold"),
+    axis.text.y = element_text(size = 12)
+  )
+
+
+### Opgave 4.2 – Gennemsnit af underspørgsmål
+# Beregn gennemsnittet for underspørgsmålet ”Set i lyset af den økonomiske situation, mener du, at
+# det for øjeblikket er fordelagtigt at anskaffe større forbrugsgoder som fjernsyn, vaskemaskine eller
+# lignende, eller er det bedre at vente?” for perioden 1. kvartal 2000 til og med 3. kvartal 2023.
+# Vurdér jeres resultat set i forhold til spørgsmålet og svarmulighederne. (Hint: giver resultatet
+# analytisk mening?)
+
+filter_forbrugsgoder <- list( INDIKATOR = "Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
+                              Tid = "*")
+
+forbrugsgoder_raw <- dst_get_data(table = "FORV1",
+                                  query = filter_forbrugsgoder,
+                                  meta_data = FORV1,
+                                  lang = "da")
+
+forbrugsgoder <- forbrugsgoder_raw[-(1:303), ]
+
+forbrugsgoder_gns <- round(mean(forbrugsgoder$value), 2)
+forbrugsgoder_gns
+
+
+
+### Opgave 4.3 - De 11 grupper af forbrug
+# Hent data for de 11 grupper af forbrug blandt husholdningerne. Hvad brugte danskerne flest penge
+# på i 2022? Hvilken gruppe af forbruget steg mest fra 2020 til 2023? (hint: I kan ikke lægge
+# kvartalerne sammen, når I har kædede værdier)
+
+# Hive NAHC21 ned med API
+
+library(dkstat)
+NAHC21 <- dst_meta(table = "NAHC21", lang = "da")
+
+# Explore variable
+NAHC21$variables # Kategorierne/Variablerne vi skal filtrere i
+NAHC21$values$PRISENHED # Deres værdier
+NAHC21$values$FORMAAAL # Deres værdier
+NAHC21$values$Tid # Deres værdier
+
+# Laver query liste
+filter_NAHC21 <- list( PRISENHED = "2020-priser, kædede værdier",
+                       Tid = c("2020", "2023"),
+                       FORMAAAL = c("Fødevarer", "Drikkevarer og tobak mv.", "Beklædning og fodtøj",
+                                    "Boligbenyttelse", "Elektricitet, gas og andet brændsel", 
+                                    "Boligudstyr, husholdningsudstyr og vedligholdelse heraf",
+                                    "Medicin, lægeudgifter o.l.",  "Køb af køretøjer", "Anden transport og kommunikation",
+                                    "Fritidsudstyr, underholdning og rejser", "Andre varer og tjenester"))
+
+# Hente 2020-2023 data ned og putte den i dataframe
+forbrug_2020_2023_NAHC21 <- dst_get_data(table = "NAHC21",
+                                         query = filter_NAHC21,
+                                         meta_data = NAHC21,
+                                         lang = "da")
+
+# Hente 2022 data ned og putte den i dataframe
+værdier_2022_NAHC21 <- dst_get_data(table = "NAHC21",
+                                    PRISENHED = "2020-priser, kædede værdier",
+                                    Tid = "2022",
+                                    FORMAAAL = c("Fødevarer", "Drikkevarer og tobak mv.", "Beklædning og fodtøj",
+                                                 "Boligbenyttelse", "Elektricitet, gas og andet brændsel", 
+                                                 "Boligudstyr, husholdningsudstyr og vedligholdelse heraf",
+                                                 "Medicin, lægeudgifter o.l.",  "Køb af køretøjer", "Anden transport og kommunikation",
+                                                 "Fritidsudstyr, underholdning og rejser", "Andre varer og tjenester"),
+                                    meta_data = NAHC21,
+                                    lang = "da")
+
+# Hive rækken med størst forbrug ud
+værdier_2022_NAHC21[which.max(værdier_2022_NAHC21$value), ]
+# Boligbenyttelse er der brugt mest på med 217.409.000.000 kr.
+
+
+# Forloop til beregning af vækst fra 2020 til 2023
+
+n <- nrow(forbrug_2020_2023_NAHC21)
+
+# Tom "kurv" til at samle resultaterne i, på forhånd fyldt med NA
+procent_resultater <- rep(NA, n)
+
+for (i in 1:(n - 11)) {
+  j <- i + 11
+  
+  værdi_i <- forbrug_2020_2023_NAHC21$value[i]
+  værdi_j <- forbrug_2020_2023_NAHC21$value[j]
+  
+  procent_ændring <- ((værdi_j - værdi_i) / værdi_i) * 100
+  
+  procent_resultater[j] <- procent_ændring   # gem resultatet på PLADS j i "kurven"
+}
+
+forbrug_2020_2023_NAHC21$Procent_ændring <- round((procent_resultater), 2)
+
+# Trække rækken med størst ændring i procent ud
+forbrug_2020_2023_NAHC21[which.max(forbrug_2020_2023_NAHC21$Procent_ændring), ]
+
+# Andre vare og tjenester er steget mest med 19.03%
+
+
+
+### Opgave 4.4 - De 11 grupper af forbrug
+# Lav 22 simple lineære regressioner mellem hver af de 11 grupper i forbruget (y-variable) og
+# henholdsvis forbrugertillidsindikatoren fra DST og DI. I skal gemme summary i 22 lister. I skal
+# lave jeres regressioner fra 1. kvartal 2000 til og med 2. kvartal 2023.
+
+# Hente samlet forbrugertillidsindekator - DST
+fTillid_sub_lm <- ftillid_kvt_df[-(1:16), ]
+
+# Hente samlet forbrugertillidsindekator - DI
+library(dkstat)
+library(tidyr)
+library(ggplot2)
+
+
+#TRIN 2: X (forbrugertillid, månedlig -> kvartaler)
+meta_DI <- dst_meta(table = "FORV1", lang = "da")
+
+#kun de 4 spørgsmål der indgår i DI-FTI: F2, F4, F9, F10
+DI_FTI_query <- list(
+  INDIKATOR = c(
+    "Familiens økonomiske situation i dag, sammenlignet med for et år siden",
+    "Danmarks økonomiske situation i dag, sammenlignet med for et år siden",
+    "Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
+    "Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr."
+  ),
+  Tid = "*"
+)
+
+DI_tillid_raw <- dst_get_data(
+  table     = "FORV1",
+  query     = DI_FTI_query,
+  meta_data = meta_DI,
+  lang      = "da"
+)
+
+DI_tillid_raw  <- DI_tillid_raw[order(DI_tillid_raw$TID), ]
+DI_tillid_wide <- pivot_wider(DI_tillid_raw, names_from = INDIKATOR, values_from = value)
+DI_tillid_wide <- DI_tillid_wide[as.numeric(format(DI_tillid_wide$TID, "%Y")) >= 2000, ]
+
+#månedlig ts og aggregate til kvartaler (3 måneder / 3 = gennemsnit)
+DI_tillid_ts <- ts(as.matrix(DI_tillid_wide[, -1]), start = c(2000, 1), frequency = 12)
+DI_tillid_q  <- aggregate(DI_tillid_ts, nfrequency = 4) / 3
+
+end(DI_tillid_q)    #seneste hele kvartal med forbrugertillid
+ncol(DI_tillid_q)   #skal være 4
+
+
+#TRIN 3: byg DI-FTI (gennemsnit af de 4 spørgsmål) og saml X og Y
+DI_tillid_df <- data.frame(
+  kvartal = round(as.numeric(time(DI_tillid_q)), 2),   #2000.00, 2000.25 osv.
+  di_fti  = rowMeans(DI_tillid_q)
+)
+
+
+# Subsette de 11 forbrugsgrupper
+
+sub_CPA <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Fødevarer",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPA <- sub_CPA[-(1:34), ]
+sub_CPA <- data.frame(sub_CPA[ , -(1:3)])
+colnames(sub_CPA) <- "FT_CPA"
+
+sub_CPB <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Drikkevarer og tobak mv.",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPB <- sub_CPB[-(1:34), ]
+sub_CPB <- data.frame(sub_CPB[ , -(1:3)])
+colnames(sub_CPB) <- "FT_CPB"
+
+sub_CPC <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Beklædning og fodtøj",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPC <- sub_CPC[-(1:34), ]
+sub_CPC <- data.frame(sub_CPC[ , -(1:3)])
+colnames(sub_CPC) <- "FT_CPC"
+
+sub_CPD <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Boligbenyttelse",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPD <- sub_CPD[-(1:34), ]
+sub_CPD <- data.frame(sub_CPD[ , -(1:3)])
+colnames(sub_CPD) <- "FT_CPD"
+
+sub_CPE <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Elektricitet, gas og andet brændsel",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPE <- sub_CPE[-(1:34), ]
+sub_CPE <- data.frame(sub_CPE[ , -(1:3)])
+colnames(sub_CPE) <- "FT_CPE"
+
+sub_CPF <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Boligudstyr, husholdningsudstyr og vedligholdelse heraf",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPF <- sub_CPF[-(1:34), ]
+sub_CPF <- data.frame(sub_CPF[ , -(1:3)])
+colnames(sub_CPF) <- "FT_CPF"
+
+sub_CPG <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Medicin, lægeudgifter o.l.",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPG <- sub_CPG[-(1:34), ]
+sub_CPG <- data.frame(sub_CPG[ , -(1:3)])
+colnames(sub_CPG) <- "FT_CPG"
+
+sub_CPH <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Køb af køretøjer",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPH <- sub_CPH[-(1:34), ]
+sub_CPH <- data.frame(sub_CPH[ , -(1:3)])
+colnames(sub_CPH) <- "FT_CPH"
+
+sub_CPI <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Anden transport og kommunikation",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPI <- sub_CPI[-(1:34), ]
+sub_CPI <- data.frame(sub_CPI[ , -(1:3)])
+colnames(sub_CPI) <- "FT_CPI"
+
+sub_CPJ <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Fritidsudstyr, underholdning og rejser",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPJ <- sub_CPJ[-(1:34), ]
+sub_CPJ <- data.frame(sub_CPJ[ , -(1:3)])
+colnames(sub_CPJ) <- "FT_CPJ"
+
+sub_CPK <- dst_get_data(table = "NAHC21",
+                        PRISENHED = "2020-priser, kædede værdier",
+                        Tid = "*",
+                        FORMAAAL = "Andre varer og tjenester",
+                        meta_data = NAHC21,
+                        lang = "da")
+sub_CPK <- sub_CPK[-(1:34), ]
+sub_CPK <- data.frame(sub_CPK[ , -(1:3)])
+colnames(sub_CPK) <- "FT_CPK"
+
+# Lave 22 lineære regressioner
+
+# Lave forbrugertillidsindikatoren (DST) til årligt og ikke kvartalvis
+ftillid_aar_ts <- aggregate(ftillid_ts, nfrequency = 1)/12 # Bruge prædefineret tidsserie
+
+# Lave til data frame på årsdata
+ftillid_aar_df <- data.frame(
+  Tidsinterval = floor(time(ftillid_aar_ts)),
+  Forbrugertillid = round(as.numeric(ftillid_aar_ts), 1))
+
+ftillid_aar_df_DST <- ftillid_aar_df[-(1:4), ]
+ftillid_aar_df_DST <- ftillid_aar_df_DST[-(25:26), ]
+
+# Lave forbrugertillidsindikatoren (DI) til årligt og ikke kvartalvis
+# Lave en time series
+fTillid_ts_DI <- ts(DI_tillid_df$kvartal, start = c(2000, 1), frequency = 4)
+
+# Omregn til år
+fTillid_aar_ts_DI <- aggregate(fTillid_ts_DI, nfrequency = 1)/4
+
+# Lave til data frame
+ftillid_aar_df_DI <- data.frame(
+  Tidsinterval = paste0(floor(time(fTillid_aar_ts_DI)), "K", cycle(fTillid_aar_ts_DI)),
+  Forbrugertillid = round(as.numeric(fTillid_aar_ts_DI), 1))
+
+# Slette de sidste to rækker
+ftillid_aar_df_DI <- ftillid_aar_df_DI[-(25:26), ]
+ftillid_aar_df_DI <- data.frame(ftillid_aar_df_DI[ , -(1)])
+
+# cbind til samlet datasæt med forbrugsgrupper
+samlet_lm_df <- cbind(ftillid_aar_df_DST, ftillid_aar_df_DI, sub_CPA, sub_CPB, sub_CPC,
+                      sub_CPD, sub_CPE, sub_CPF, sub_CPG, sub_CPH, sub_CPI,
+                      sub_CPJ, sub_CPK)
+
+colnames(samlet_lm_df)[2:3] <- c("Forbrugertillid_DST", "Forbrugertillid_DI")
+
+# Lineære regressioner på DST og forbrugsgrupper
+# Gruppe A: (Fødevare)
+lm_CPA_DST <- lm(FT_CPA ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPA_DST)
+sumr_list_lm_CPA_DST <- list(summary(lm_CPA_DST))
+
+# Gruppe B: (Drikkevarer og tobak mv.)
+lm_CPB_DST <- lm(FT_CPB ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPB_DST)
+sumr_list_lm_CPB_DST <- list(summary(lm_CPB_DST))
+
+# Gruppe C: (Beklædning og fodtøj)
+lm_CPC_DST <- lm(FT_CPC ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPC_DST)
+sumr_list_lm_CPC_DST <- list(summary(lm_CPC_DST))
+
+# Gruppe D: (Boligudnyttelse)
+lm_CPD_DST <- lm(FT_CPD ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPD_DST)
+sumr_list_lm_CPD_DST <- list(summary(lm_CPD_DST))
+
+# Gruppe E: (Elektricitet, gas og andet brændsel)
+lm_CPE_DST <- lm(FT_CPE ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPE_DST)
+sumr_list_lm_CPE_DST <- list(summary(lm_CPE_DST))
+
+# Gruppe F: (Boligudstyr, husholdningsudstyr og vedligeholdelse heraf)
+lm_CPF_DST <- lm(FT_CPF ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPF_DST)
+sumr_list_lm_CPF_DST <- list(summary(lm_CPF_DST))
+
+# Gruppe G: (Medicin, lægeudgifter o.l.)
+lm_CPG_DST <- lm(FT_CPG ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPG_DST)
+sumr_list_lm_CPG_DST <- list(summary(lm_CPG_DST))
+
+# Gruppe H: (Køb af køretøjer)
+lm_CPH_DST <- lm(FT_CPH ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPH_DST)
+sumr_list_lm_CPH_DST <- list(summary(lm_CPH_DST))
+
+# Gruppe I: (Anden transport og kommunikation)
+lm_CPI_DST <- lm(FT_CPI ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPI_DST)
+sumr_list_lm_CPI_DST <- list(summary(lm_CPI_DST))
+
+# Gruppe J: (Fritidsudstyr, underholdning og rejser)
+lm_CPJ_DST <- lm(FT_CPJ ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPJ_DST)
+sumr_list_lm_CPJ_DST <- list(summary(lm_CPJ_DST))
+
+# Gruppe K: (Andre vare og tjenester)
+lm_CPK_DST <- lm(FT_CPK ~ Forbrugertillid_DST, data = samlet_lm_df)
+summary(lm_CPK_DST)
+sumr_list_lm_CPK_DST <- list(summary(lm_CPK_DST))
+
+# Lineære regressioner på DI og forbrugsgrupper
+# Gruppe A: (Fødevare)
+lm_CPA_DI <- lm(FT_CPA ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPA_DI)
+sumr_list_lm_CPA_DI <- list(summary(lm_CPA_DI))
+
+# Gruppe B: (Drikkevarer og tobak mv.)
+lm_CPB_DI <- lm(FT_CPB ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPB_DI)
+sumr_list_lm_CPB_DI <- list(summary(lm_CPB_DI))
+
+# Gruppe C: (Beklædning og fodtøj)
+lm_CPC_DI <- lm(FT_CPC ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPC_DI)
+sumr_list_lm_CPC_DI <- list(summary(lm_CPC_DI))
+
+# Gruppe D: (Boligudnyttelse)
+lm_CPD_DI <- lm(FT_CPD ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPD_DI)
+sumr_list_lm_CPD_DI <- list(summary(lm_CPD_DI))
+
+# Gruppe E: (Elektricitet, gas og andet brændsel)
+lm_CPE_DI <- lm(FT_CPE ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPE_DI)
+sumr_list_lm_CPE_DI <- list(summary(lm_CPE_DI))
+
+# Gruppe F: (Boligudstyr, husholdningsudstyr og vedligeholdelse heraf)
+lm_CPF_DI <- lm(FT_CPF ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPF_DI)
+sumr_list_lm_CPF_DI <- list(summary(lm_CPF_DI))
+
+# Gruppe G: (Medicin, lægeudgifter o.l.)
+lm_CPG_DI <- lm(FT_CPG ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPG_DI)
+sumr_list_lm_CPG_DI <- list(summary(lm_CPG_DI))
+
+# Gruppe H: (Køb af køretøjer)
+lm_CPH_DI <- lm(FT_CPH ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPH_DI)
+sumr_list_lm_CPH_DI <- list(summary(lm_CPH_DI))
+
+# Gruppe I: (Anden transport og kommunikation)
+lm_CPI_DI <- lm(FT_CPI ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPI_DI)
+sumr_list_lm_CPI_DI <- list(summary(lm_CPI_DI))
+
+# Gruppe J: (Fritidsudstyr, underholdning og rejser)
+lm_CPJ_DI <- lm(FT_CPJ ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPJ_DI)
+sumr_list_lm_CPJ_DI <- list(summary(lm_CPJ_DI))
+
+# Gruppe K: (Andre vare og tjenester)
+lm_CPK_DI <- lm(FT_CPK ~ Forbrugertillid_DI, data = samlet_lm_df)
+summary(lm_CPK_DI)
+sumr_list_lm_CPK_DI <- list(summary(lm_CPK_DI))
+
+# Plotte linære regressioner på 
+
+ggplot(samlet_lm_df, aes(y = FT_CPD, x = Forbrugertillid_DST)) +
+  geom_point(color = "pink3") +
+  geom_smooth(method = "lm", color = "hotpink3")+
+  theme_minimal() +
+  labs(x = "DST Forbrugertillidsindekator",
+       y = " Forbrugsgruppen: Boligudbyttelse",
+       title = " Linære regression for Boligydnyttelse & DST Forbrugertillidsindekator",
+       caption = "Kilde: Danmarks Statistik & Egne beregninger")
+
+ggplot(samlet_lm_df, aes(y = FT_CPD, x = Forbrugertillid_DI)) +
+  geom_point(color = "pink3") +
+  geom_smooth(method = "lm", color = "hotpink3")+
+  theme_minimal() +
+  labs(x = "DST Forbrugertillidsindekator",
+       y = " Forbrugsgruppen: Boligudbyttelse",
+       title = " Linære regression for Boligydnyttelse & DI Forbrugertillidsindekator",
+       caption = "Kilde: Danmarks Statistik & Egne beregninger")
+
+
+### --- Opgave 5 --- ###
+
+### Opgave 5.1 – Kvartalsvis årlig realvækst for en række Eurolande
+# Beregn den kvartalsvise årlige realvækst for husholdningernes forbrugsudgift 
+# for Danmark,Belgien, Holland, Sverige, Østrig, Tyskland, Frankrig, Italien og 
+# Spanien i perioden 1. kvartal 2000 til og med 2. kvartal 2023. I skal hente 
+# data vha. API’et fra Eurostat.
+
+# Vi har valgt at tage med til de seneste data i 2026Q2 :))
+
+library(eurostat)
+install.packages("restatapi")
+library(restatapi)
+library(stringr)
+library(dplyr)
+
+# total content
+alltabs <- get_eurostat_toc()
+
+#filtrer efter emne
+realvæstTabs= alltabs |> filter(str_detect(title, "House|house")) |>
+  filter(str_detect(title, "house"))
+
+# henter meta data, efter at have kigget på gastabs og fundet koden
+# Vi er gået med Final consumption expenditure of households and non-profit 
+# institutions serving households - quarterly data
+
+# Note, undersøg hvis muligt hvad denne indebærer
+
+husForbrugMeta =get_eurostat_dsd("namq_10_fcs")
+
+# Undersøge datasæt med henblik på at finde relevante punkter til filtrering
+unique(husForbrugMeta$concept)
+
+# Undersøge værdierne i hvert "filter"
+husForbrugMeta |> filter(concept=="freq") # 1 værdi, kvartalvist = Q
+husForbrugMeta |> filter(concept=="unit") # 19 værdier, priser - vi vælger 2020 kædet værdier = CLV20_MEUR
+husForbrugMeta |> filter(concept=="s_adj") # 4 værdier, sæsonkorrigering - vi vælger sæson og kalender korrigeret = SCA 
+husForbrugMeta |> filter(concept=="na_item") # 6 værdier, forbrugsgrupper - vi vælger samlet forbrug = P31_S14
+husForbrugMeta |> filter(concept=="geo") # 41 værdier, lande koder = DK, BE, NL, SE, AT, DE, FR, IT, ES
+
+# Lave en query med vores filter
+realVæskt_query <- list(unit = "CLV20_MEUR", # Vælger kædet værdier
+                        geo = c("DK", "BE", "NL", "SE", "AT", "DE", "FR", "IT", "ES"), # Landekoderne
+                        s_adj = "SCA", # Vælger at tage dem sæsonkorregerede
+                        na_item = "P31_S14",
+                        freq = "Q") # Kvartalmæssige værdier
+
+# Hente færdigt datasæt
+realVækst_euroStat <- get_eurostat_data("namq_10_fcs", # Det rå datasæt
+                                        filters = realVæskt_query, # Vores filter liste
+                                        date_filter = ">1999", # For at kunne beregne realvæksten for 2000 også
+                                        verbose = T) # Få statusbeskeder på importeringsprocessen
+
+# Beregne realvækst for alle landene
+
+# Hvordan gør vi?
+# Subsetter vi så vi laver et dataframe til hverland og beregner realvækst på dem?
+# Så ligner det fremgangsmetoden som på den danske
+# Kan cbindes til sidst i et samlet data når vi har beregnet realvæksten :))
+# Andet?
+
+# Subsette alle landende for at berenge realvækst enkelvist
+sub_AT <- realVækst_euroStat[grepl("^AT", realVækst_euroStat$geo), ] # Østrig
+
+sub_BE <- realVækst_euroStat[grepl("^BE", realVækst_euroStat$geo), ] # Belgien
+
+sub_DE <- realVækst_euroStat[grepl("^DE", realVækst_euroStat$geo), ] # Tyskland
+
+sub_DK <- realVækst_euroStat[grepl("^DK", realVækst_euroStat$geo), ] # Danmark :))
+
+sub_ES <- realVækst_euroStat[grepl("^ES", realVækst_euroStat$geo), ] # Spanien
+
+sub_FR <- realVækst_euroStat[grepl("^FR", realVækst_euroStat$geo), ] # Frankrig
+
+sub_IT <- realVækst_euroStat[grepl("^IT", realVækst_euroStat$geo), ] # Italien
+
+sub_NL <- realVækst_euroStat[grepl("^NL", realVækst_euroStat$geo), ] # Holland
+
+sub_SE <- realVækst_euroStat[grepl("^SE", realVækst_euroStat$geo), ] # Sverige
+
+# Lave REALVÆKST
+sub_AT_RVp <- (diff(log(as.numeric(sub_AT$values)), lag = 4)) * 100
+sub_AT_RVp <- (exp(diff(log(as.numeric(sub_AT$values)), lag = 4)) - 1) * 100
+sub_AT_RVp <- round(data.frame(sub_AT_RVp), 3)
+names(sub_AT_RVp) <- "Østrig"
+
+sub_BE_RVp <- (diff(log(as.numeric(sub_BE$values)), lag = 4)) * 100
+sub_BE_RVp <- (exp(diff(log(as.numeric(sub_BE$values)), lag = 4)) - 1) * 100
+sub_BE_RVp <- round(data.frame(sub_BE_RVp), 3)
+names(sub_BE_RVp) <- "Belgien"
+
+sub_DE_RVp <- (diff(log(as.numeric(sub_DE$values)), lag = 4)) * 100
+sub_DE_RVp <- (exp(diff(log(as.numeric(sub_DE$values)), lag = 4)) - 1) * 100
+sub_DE_RVp <- round(data.frame(sub_DE_RVp), 3)
+names(sub_DE_RVp) <- "Tyskland"
+
+sub_DK_RVp <- (diff(log(as.numeric(sub_DK$values)), lag = 4)) * 100
+sub_DK_RVp <- (exp(diff(log(as.numeric(sub_DK$values)), lag = 4)) - 1) * 100
+sub_DK_RVp <- round(data.frame(sub_DK_RVp), 3)
+names(sub_DK_RVp) <- "Danmark"
+
+sub_ES_RVp <- (diff(log(as.numeric(sub_ES$values)), lag = 4)) * 100
+sub_ES_RVp <- (exp(diff(log(as.numeric(sub_ES$values)), lag = 4)) - 1) * 100
+sub_ES_RVp <- round(data.frame(sub_ES_RVp), 3)
+names(sub_ES_RVp) <- "Spanien"
+
+sub_FR_RVp <- (diff(log(as.numeric(sub_FR$values)), lag = 4)) * 100
+sub_FR_RVp <- (exp(diff(log(as.numeric(sub_FR$values)), lag = 4)) - 1) * 100
+sub_FR_RVp <- round(data.frame(sub_FR_RVp), 3)
+names(sub_FR_RVp) <- "Frankrig"
+
+sub_IT_RVp <- (diff(log(as.numeric(sub_IT$values)), lag = 4)) * 100
+sub_IT_RVp <- (exp(diff(log(as.numeric(sub_IT$values)), lag = 4)) - 1) * 100
+sub_IT_RVp <- round(data.frame(sub_IT_RVp), 3)
+names(sub_IT_RVp) <- "Italien"
+
+sub_NL_RVp <- (diff(log(as.numeric(sub_NL$values)), lag = 4)) * 100
+sub_NL_RVp <- (exp(diff(log(as.numeric(sub_NL$values)), lag = 4)) - 1) * 100
+sub_NL_RVp <- round(data.frame(sub_NL_RVp), 3)
+names(sub_NL_RVp) <- "Holland"
+
+sub_SE_RVp <- (diff(log(as.numeric(sub_SE$values)), lag = 4)) * 100
+sub_SE_RVp <- (exp(diff(log(as.numeric(sub_SE$values)), lag = 4)) - 1) * 100
+sub_SE_RVp <- round(data.frame(sub_SE_RVp), 3)
+names(sub_SE_RVp) <- "Sverige"
+
+# Tidsramme
+sub_tid <- data.frame(sub_AT$time)
+sub_tid <- sub_tid[-(1:4), ]
+sub_tid <- data.frame(sub_tid)
+names(sub_tid) <- "Tidsperioder"
+
+# Merge
+samlet_RV_df_EU_stat <- cbind(sub_tid, sub_SE_RVp, sub_NL_RVp, sub_IT_RVp,
+                              sub_FR_RVp, sub_ES_RVp, sub_DK_RVp, sub_DE_RVp,
+                              sub_BE_RVp, sub_AT_RVp)
+
+
+
+
+### Opgave 5.2 – Højeste kvartalsvise årlige realvækst
+# Hvilket af de landene har gennemsnitligt haft den højeste kvartalsvise årlige realvækst i
+# husholdningernes forbrugsudgift i perioden 1. kvartal 2000 til 2. kvartal 2023.
+
+gns_SE <- round(mean(samlet_RV_df_EU_stat$Sverige), 3)
+gns_NL <- round(mean(samlet_RV_df_EU_stat$Holland), 3)
+gns_IT <- round(mean(samlet_RV_df_EU_stat$Italien), 3)
+gns_FR <- round(mean(samlet_RV_df_EU_stat$Frankrig), 3)
+gns_ES <- round(mean(samlet_RV_df_EU_stat$Spanien), 3)
+gns_DK <- round(mean(samlet_RV_df_EU_stat$Danmark), 3)
+gns_DE <- round(mean(samlet_RV_df_EU_stat$Tyskland), 3)
+gns_BE <- round(mean(samlet_RV_df_EU_stat$Belgien), 3)
+gns_AT <- round(mean(samlet_RV_df_EU_stat$Østrig), 3)
+
+# Samle dem i dataframe?
+gns_df <- data.frame(gns_SE, gns_NL, gns_IT, gns_FR, gns_ES, gns_DK,
+                     gns_DE, gns_BE, gns_AT)
+
+# Sætte dem i størrelsesmæssig orden på en smart måde?
+
+library(tidyr)
+library(ggplot2)
+
+gnst_long <- pivot_longer(
+  gns_df,
+  cols = everything(),
+  names_to = "Land",
+  values_to = "Gennemsnit"
+)
+
+gnst_long$Land <- gsub("gns_", "", gnst_long$Land)
+
+landenavne <- c(
+  SE = "Sverige", NL = "Holland", IT = "Italien", FR = "Frankrig",
+  ES = "Spanien", DK = "Danmark", DE = "Tyskland", BE = "Belgien", AT = "Østrig"
+)
+
+gnst_long$Land_navn <- landenavne[gnst_long$Land]
+
+ggplot(gnst_long, aes(x = reorder(Land_navn, -Gennemsnit), y = Gennemsnit, fill = Gennemsnit)) +
+  geom_col() +
+  scale_fill_gradient(low = "pink", high = "hotpink3") +
+  geom_text(aes(label = paste0(round(Gennemsnit, 2), "%")), vjust = -0.5) +
+  guides(fill = "none") +
+  labs(x = NULL, 
+       y = "Gennemsnit %", 
+       title = "Sverige har haft den største gennemsnitlige realvækst i årrækken 2000-2026",
+       subtitle = "Den gennemsnitlige realvækst er beregnet ud fra husholdningernes privatforbrug",
+       caption = "Kilde: EuroStat & Egne beregninger") +
+  theme_minimal() +
+  theme(
+    axis.text  = element_text(size = 14),
+    axis.title = element_text(size = 16),
+    legend.text = element_text(size = 12),
+    plot.title = element_text(size = 20))
+
+
+### Opgave 5.3 – Coronakrisen som outlier
+# Fjerne Coronakrisen fra jeres data og find igen den gennemsnitligt kvartalsvise realvækst i
+# husholdningernes forbrugsudgift i perioden 1. kvartal 2000 til 2. kvartal 2023. I hvilket af landene
+# har Coronakrisen haft en største effekt på den gennemsnitligt kvartalsvise realvækst.
+
+# Hvor længe varede coronakrisen???
+
+samlet_RV_df_EU_stat_corona <- samlet_RV_df_EU_stat[-(82:95), ]
+
+# Lave gennemsnit på corona
+gns_SE_corona <- round(mean(samlet_RV_df_EU_stat_corona$Sverige), 3)
+gns_NL_corona <- round(mean(samlet_RV_df_EU_stat_corona$Holland), 3)
+gns_IT_corona <- round(mean(samlet_RV_df_EU_stat_corona$Italien), 3)
+gns_FR_corona <- round(mean(samlet_RV_df_EU_stat_corona$Frankrig), 3)
+gns_ES_corona <- round(mean(samlet_RV_df_EU_stat_corona$Spanien), 3)
+gns_DK_corona <- round(mean(samlet_RV_df_EU_stat_corona$Danmark), 3)
+gns_DE_corona <- round(mean(samlet_RV_df_EU_stat_corona$Tyskland), 3)
+gns_BE_corona <- round(mean(samlet_RV_df_EU_stat_corona$Belgien), 3)
+gns_AT_corona <- round(mean(samlet_RV_df_EU_stat_corona$Østrig), 3)
+
+# Samle dem i dataframe?
+gns_df_corona <- data.frame(gns_SE_corona, gns_NL_corona, gns_IT_corona, 
+                            gns_FR_corona, gns_ES_corona, gns_DK_corona, 
+                            gns_DE_corona, gns_BE_corona, gns_AT_corona)
+
+# Gør dem mere overskuelige???
+gnst_long_corona <- pivot_longer(
+  gns_df_corona,
+  cols = everything(),
+  names_to = "Land",
+  values_to = "Gennemsnit"
+)
+
+
+# Ændre så værdierne i land er landekoder
+gnst_long_corona$Land <- gsub("gns_", "", gnst_long$Land)
+
+landenavne <- c(
+  SE = "Sverige", NL = "Holland", IT = "Italien", FR = "Frankrig",
+  ES = "Spanien", DK = "Danmark", DE = "Tyskland", BE = "Belgien", AT = "Østrig"
+)
+
+gnst_long_corona$Land_navn <- landenavne[gnst_long$Land]
+
+ggplot(gnst_long_corona, aes(x = reorder(Land_navn, -Gennemsnit), y = Gennemsnit, fill = Gennemsnit)) +
+  geom_col() +
+  scale_fill_gradient(low = "pink", high = "hotpink3") +
+  geom_text(aes(label = paste0(round(Gennemsnit, 2), "%")), vjust = -0.5) +
+  guides(fill = "none") +
+  labs(x = NULL, 
+       y = "Gennemsnit", 
+       title = "Belgien, Spanien & Østrig har haft den største gennemsnitlige 
+realvækst i årrækken 2000-2026 modregnet Coronakrisen 
+(2020Q2 - 2023Q3)",
+       subtitle = "Den gennemsnitlige realvækst er beregnet ud fra husholdningernes 
+privatforbrug, samt NGO´er der betjener husholdningerne",
+       caption = "Kilde: EuroStat") +
+  theme_classic()
+
+# Hvilken realvækst har haft den største ændring?
+corona_gns <- data.frame(gnst_long_corona$Gennemsnit)
+names(corona_gns) <- "Corona"
+
+samlet_gns <- data.frame(gnst_long$Gennemsnit)
+names(samlet_gns) <- "Samlet"
+
+lande_gns <- data.frame(gnst_long$Land)
+names(lande_gns) <- "Lande"
+
+ændring_i_rv <- cbind(lande_gns, samlet_gns, corona_gns)
+View(ændring_i_rv)
+
+# Lave et for loop der viser ændring
+ændring_i_rv$Ændring_p <- round((ændring_i_rv$Corona - ændring_i_rv$Samlet), 3)
+ændring_i_rv$Ændring <- round(((ændring_i_rv$Corona - ændring_i_rv$Samlet)/ændring_i_rv$Samlet)*100, 3)
+
+ggplot(ændring_i_rv, aes(x = reorder(Lande, -Ændring), y = Ændring, fill = Ændring)) +
+  geom_col() +
+  scale_fill_gradient(low = "pink", high = "hotpink3") +
+  geom_text(aes(label = paste0(round(Ændring, 2), "%")), vjust = -0.5) +
+  guides(fill = "none") +
+  labs(x = NULL, 
+       y = "Ændring", 
+       title = "Coronakrisen har haft størst effekt på Belgien & Hollands 
+gennemsnitlige realvækst",
+       subtitle = "Grafen viser den største forskel i procent, for den gennemsnitlige 
+samlet realvækst modregnet coronaperioden i de forskellige lande i 
+årrækken 2000-2026",
+       caption = "Kilde: EuroStat") +
+  theme_classic()
+
+# Put a pin in it
+
+
+
+### Opgave 5.4 – Effekt af Corona på forbruget
+# I hvilket europæiske land faldt den gennemsnitligt kvartalsvise realvækst i 
+# husholdningernes forbrugsudgift, i perioden 1. kvartal 2020 til 2. kvartal 2023, mest?
+
+# Vi har data explored og perioden på 3,5 år er for lang :))
+# Opsvinget der kom i 2022 og 2023 udligner crash i 2020 og 2021
+
+# Korrigeret vækst
+sub_2015_k_df <- samlet_RV_df_EU_stat[-(81:94), ]
+sub_2015_k_df <- sub_2015_k_df[-(1:60), ]
+
+sub_2015_gns_SE <- round(mean(sub_2015_k_df$Sverige), 3)
+sub_2015_gns_NL <- round(mean(sub_2015_k_df$Holland), 3)
+sub_2015_gns_IT <- round(mean(sub_2015_k_df$Italien), 3)
+sub_2015_gns_FR <- round(mean(sub_2015_k_df$Frankrig), 3)
+sub_2015_gns_ES <- round(mean(sub_2015_k_df$Spanien), 3)
+sub_2015_gns_DK <- round(mean(sub_2015_k_df$Danmark), 3)
+sub_2015_gns_DE <- round(mean(sub_2015_k_df$Tyskland), 3)
+sub_2015_gns_BE <- round(mean(sub_2015_k_df$Belgien), 3)
+sub_2015_gns_AT <- round(mean(sub_2015_k_df$Østrig), 3)
+
+# Samle i dataframe
+sub_2015_k_df <- data.frame(sub_2015_gns_SE, sub_2015_gns_NL, sub_2015_gns_IT,
+                            sub_2015_gns_FR, sub_2015_gns_ES, sub_2015_gns_DK,
+                            sub_2015_gns_DE, sub_2015_gns_BE, sub_2015_gns_AT)
+
+# Gør dem mere overskuelige?
+sub_2015_k_df_long <- pivot_longer(
+  sub_2015_k_df,
+  cols = everything(),
+  names_to = "Land",
+  values_to = "Gennemsnit korrigeret"
+)
+
+# Corona vækst
+corona_vækst_gns_SE <- round(mean(samlet_RV_df_EU_stat[(81:94), 2]), 3) 
+corona_vækst_gns_NL <- round(mean(samlet_RV_df_EU_stat[(81:94), 3]), 3)
+corona_vækst_gns_IT <- round(mean(samlet_RV_df_EU_stat[(81:94), 4]), 3)
+corona_vækst_gns_FR <- round(mean(samlet_RV_df_EU_stat[(81:94), 5]), 3)
+corona_vækst_gns_ES <- round(mean(samlet_RV_df_EU_stat[(81:94), 6]), 3)
+corona_vækst_gns_DK <- round(mean(samlet_RV_df_EU_stat[(81:94), 7]), 3)
+corona_vækst_gns_DE <- round(mean(samlet_RV_df_EU_stat[(81:94), 8]), 3)
+corona_vækst_gns_BE <- round(mean(samlet_RV_df_EU_stat[(81:94), 9]), 3)
+corona_vækst_gns_AT <- round(mean(samlet_RV_df_EU_stat[(81:94), 10]), 3)
+
+#Samle i dataframe
+sub_2015_corona_df <- data.frame(corona_vækst_gns_SE, corona_vækst_gns_NL, corona_vækst_gns_IT,
+                                 corona_vækst_gns_FR, corona_vækst_gns_ES, corona_vækst_gns_DK,
+                                 corona_vækst_gns_DE, corona_vækst_gns_BE, corona_vækst_gns_AT)
+
+# Gør dem mere overskuelige?
+sub_2015_corona_df_long <- pivot_longer(
+  sub_2015_corona_df,
+  cols = everything(),
+  names_to = "Land",
+  values_to = "Gennemsnit corona"
+)
+
+sub_2015_corona_df_long <- data_frame(sub_2015_corona_df_long[ , -1])
+
+# Samlet df for 5.4
+samlet_df_opg_5.4 <- cbind(sub_2015_k_df_long, sub_2015_corona_df_long)
+
+# Beregne forskellen
+samlet_df_opg_5.4$Forskel <- round((((samlet_df_opg_5.4$`Gennemsnit corona`
+                                      - samlet_df_opg_5.4$`Gennemsnit korrigeret`)/
+                                       samlet_df_opg_5.4$`Gennemsnit korrigeret`)*100), 3)
+
+# Visualisering af faldet
+sub_2015_plot_data <- samlet_df_opg_5.4 %>%
+  mutate(
+    Land_kort = gsub("sub_2015_gns_", "", Land)
+  )
+
+# Lav plottet
+ggplot(sub_2015_plot_data, aes(x = reorder(Land_kort, -Forskel), y = Forskel, fill = Forskel)) +
+  geom_col() +
+  scale_fill_gradient(low = "pink", high = "hotpink3") +
+  geom_text(
+    aes(
+      label = paste0(round(Forskel, 2), "%"),
+      vjust = ifelse(Forskel >= 0, -0.5, 1.2)
+    ),
+    size = 3.5
+  ) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(
+    title = "Forskellen i gennemsnitlig realvækst",
+    subtitle = "Gennemsnit korrigeret vs. Gennemsnit corona",
+    x = NULL,
+    y = "Forskel i procentpoint",
+    caption = "Kilde: EuroStat"
+  )
+
+
+# Visualisering af coronakrisens påvirkning
+library(ggplot2)
+library(tidyr)
+library(scales)
+
+# Omstrukturer data så det er plot´able
+plot_5.4_df <- pivot_longer(
+  data = samlet_RV_df_EU_stat,
+  cols = -Tidsperioder, 
+  names_to = "Land", 
+  values_to = "Realvaekst"
+)
+
+# Lave et ggplot
+ggplot(plot_5.4_df, aes(x = Tidsperioder, y = Realvaekst, color = Land, group = Land)) +
+  geom_line() +
+  scale_x_discrete(
+    breaks = function(x) x[grepl("-Q1$", x)],
+    labels = function(x) sub("-Q1$", "", x)
+  ) +
+  scale_y_continuous(labels = unit_format(unit = "%")) +
+  scale_color_brewer(palette = "PuRd") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5)) +
+  labs(x = "Tidsperiode",
+       y = "Realvækst i procent",
+       title = "Udvikling i Realvækst i procent",
+       subtitle = "Visualisering af coronakrisens påvirkning på realvæksen i perioden 2020-2023 for de valgte EU lande",
+       caption = "Kilde: EuroStat & Egne beregninger")
+
+# Den danske gennemsnitlige realvækst under coronaperioden faldt mest sammenlignet 
+# med et korrigeret gennemsnit der er renset for coronaårene.
+# Den danske realvækst var i gennemsnit 76,7% lavere i perioden.

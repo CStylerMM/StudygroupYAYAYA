@@ -199,7 +199,6 @@ ggplot(df_kvmpris_bycat, aes(x = bycat, y = kvmpris)) +
   geom_text(aes(label = paste0(round(kvmpris), " kr.\n(n = ", antal, ")")), vjust = -0.3, size = 3.5) +  #pris og antal over søjlen
   scale_y_continuous(limits = c(0, 30000), expand = c(0, 0)) +  #aksen går fra 0 til 30.000 kr. pr. m²
   labs(title = "Gennemsnitlig pris pr. m² efter bykategori",
-       subtitle = "Boliger til salg, byer kategoriseret efter DST's byområder 2026",
        x = "Bykategori", y = "Kr. pr. m²",
        caption = paste0(hoejeste, " har den højeste pris pr. m² (", round(max(df_kvmpris_bycat$kvmpris)),
                         " kr.), ", forskel_pct, " % over laveste, ", laveste, " (", round(min(df_kvmpris_bycat$kvmpris)),
@@ -365,6 +364,9 @@ summary(lm_dst)
 
 #funktion der laver Baums tabel (R2 og korrelation) på et udsnit af data
 #test = det stykke data vi giver funktionen, fx alle kvartaler eller kun til 2016K2
+
+round(summary(lm_di)$coefficients, 3)  #skæring og hældning for DI-FTI, med std. fejl, t-værdi og p-værdi
+round(summary(lm_dst)$coefficients, 3) 
 baum_tabel <- function(test) {
   data.frame(
     Mål = c("Forklaringsgrad (R2)", "Korrelation"),            #rækkerne: det vi måler
@@ -394,6 +396,10 @@ nrow(df_fti_vaekst[df_fti_vaekst$kvartal <= 2016.25, ])
 df_baum_original           #Baums egne tal
 df_r2_kor_baum_periode     #vores tal på hans periode
 df_r2_kor_alle_kvartaler   #vores tal på alle kvartaler
+
+df_r2_kor_til2023 <- baum_tabel(df_fti_vaekst[df_fti_vaekst$kvartal <= 2023.75, ])  #R2 og korrelation til og med 2023K4
+df_r2_kor_til2023
+nrow(df_fti_vaekst[df_fti_vaekst$kvartal <= 2023.75, ])  #skal være 96 kvartaler
 
 
 #som vi kan se. så er mønsteret det samme fra baum originalen og vores tal på hans periode
@@ -550,7 +556,6 @@ df_seneste_gaet <- data.frame(
 )
 df_seneste_gaet
 
-mean(resid(lm_di)[seneste_kvartaler])   #positiv = modellen gætter for lavt de seneste kvartaler
 
 #og i kvartaler hvor forbruget faldt: gætter modellen for højt eller lavt?
 mean(resid(lm_di)[df_fti_vaekst$realvaekst < 0])   #negativ = gættede for højt, altså undervurderede faldet
@@ -670,9 +675,8 @@ ggplot(df_fti_vaekst, aes(x = est_di, y = res_di)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +   #nul = modellen ramte rigtigt
   labs(x = "Estimeret vækst (DI-FTI), pct.", y = "Residual, procentpoint",
        title = "Residualer mod estimerede værdier, DI-FTI",
-       caption = paste0("Residualernes standardafvigelse er ", komma(sd(df_fti_vaekst$res_di)),
-                        " procentpoint. Største fejl: ", kvartal_tekst(df_fti_vaekst$kvartal[stoerste_di]),
-                        " (", komma(df_fti_vaekst$res_di[stoerste_di]), ").\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
+       caption = paste0("Modellen afviger typisk med ", round(sd(df_fti_vaekst$res_di), 2),
+                        " procentpoint.\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
   theme_classic()
 
 ggplot(df_fti_vaekst, aes(x = est_dst, y = res_dst)) +
@@ -680,12 +684,11 @@ ggplot(df_fti_vaekst, aes(x = est_dst, y = res_dst)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +
   labs(x = "Estimeret vækst (DST FTI), pct.", y = "Residual, procentpoint",
        title = "Residualer mod estimerede værdier, DST FTI",
-       caption = paste0("Residualernes standardafvigelse er ", komma(sd(df_fti_vaekst$res_dst)),
-                        " procentpoint. Største fejl: ", kvartal_tekst(df_fti_vaekst$kvartal[stoerste_dst]),
-                        " (", komma(df_fti_vaekst$res_dst[stoerste_dst]), ").\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
+       caption = paste0("Modellen afviger typisk med ", round(sd(df_fti_vaekst$res_dst), 2),
+                        " procentpoint.\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
   theme_classic()
 
-#ekstra: residualerne over tid. Hvis fejlene ligger i stribe over eller under nul, er de ikke tilfældige
+#ekstra: residualerne over tid. Hvis afvigelserne ligger i stribe over eller under nul, er de ikke tilfældige
 ggplot(df_fti_vaekst, aes(x = kvartal)) +
   geom_point(aes(y = res_di, color = "DI-FTI")) +
   geom_point(aes(y = res_dst, color = "DST FTI")) +
@@ -693,12 +696,11 @@ ggplot(df_fti_vaekst, aes(x = kvartal)) +
   scale_color_manual(name = NULL, values = c("DI-FTI" = "black", "DST FTI" = "darkgreen")) +
   labs(x = NULL, y = "Residual, procentpoint",
        title = "Residualer over tid",
-       caption = paste0("Gennemsnitlig fejl de seneste fire kvartaler: ", komma(mean(tail(df_fti_vaekst$res_di, 4))),
-                        " (DI-FTI) og ", komma(mean(tail(df_fti_vaekst$res_dst, 4))),
-                        " (DST FTI).\nPositiv = modellen gætter for lavt.\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +   #linjeskift, så captionen ikke klippes af
+       caption = paste0("Modellerne gætter for lavt de seneste fire kvartaler: i snit ", round(mean(tail(df_fti_vaekst$res_di, 4)), 2),
+                        " (DI-FTI) og ", round(mean(tail(df_fti_vaekst$res_dst, 4)), 2),
+                        " (DST FTI) procentpoint.\nPositiv = faktisk vækst over modellens gæt.\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
   theme_classic() +
   theme(legend.position = "top")
-
 #kvartaler med fejl over 3 procentpoint
 df_fti_vaekst[abs(df_fti_vaekst$res_di) > 3, c("kvartal", "realvaekst", "est_di", "res_di")]
 df_fti_vaekst[abs(df_fti_vaekst$res_dst) > 3, c("kvartal", "realvaekst", "est_dst", "res_dst")]

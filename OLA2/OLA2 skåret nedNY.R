@@ -272,7 +272,7 @@ df_tillid_raa <- dst_get_data(
 #tid til at bruge tidyr
 library(tidyr)
 
-df_tillid_raa <- df_tillid_raa[order(df_tillid_raa$TID), ]
+df_tillid_raa <- df_tillid_raa[order(df_tillid_raa$TID), ] #rækkerne sorteres efter tid
 df_tillid_bred <- pivot_wider(df_tillid_raa, names_from = INDIKATOR, values_from = value)   #ét spørgsmål pr. kolonne
 df_tillid_bred <- df_tillid_bred[df_tillid_bred$TID >= as.Date("2000-01-01"), ] #vi starter fra år 2000 ligesom Mr. Baum
 
@@ -323,117 +323,137 @@ lm_di <- lm(realvaekst ~ di_fti, data = df_fti_vaekst)
 lm_dst <- lm(realvaekst ~ dst_fti, data = df_fti_vaekst)
 
 summary(lm_di)
-#Residuals:
-#Min      1Q  Median      3Q     Max 
-#-4.8172 -1.5754 -0.0176  1.1989  8.0720 
-
 #Coefficients:
-#  Estimate Std. Error t value Pr(>|t|)    
-#(Intercept)  2.23679    0.24095   9.283 2.68e-15 ***
-#  di_fti       0.18606    0.02362   7.879 3.39e-12 ***
-#  ---
-#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-
+#             Estimate Std. Error t value Pr(>|t|)
+#(Intercept)   2.23679    0.24095   9.283 2.68e-15 ***
+#di_fti        0.18606    0.02362   7.879 3.39e-12 ***
 #Residual standard error: 2.19 on 104 degrees of freedom
-#Multiple R-squared:  0.3738,	Adjusted R-squared:  0.3677 
-#F-statistic: 62.07 on 1 and 104 DF,  p-value: 3.386e-12
+#Multiple R-squared:  0.3738
+
+##Estimate = koefficenten (altså når DI FTI stiger med 1 stiger væksten i gennemsnit med 0.186
+
+##Std. Error = Standard afvigelse for koefficenten, hvis vi brugte nye kvartaller og lavede det her igen.
+##ville svinge med 0.02362
+
+##t-value = ja tværdi som kigger på støj og signal. det egentlig blot est/std. error. signal på 7,9 viser godt signal, 
+##hvis vi følger tommelfingerreglen om at det skal være over 2. før der stærkt signal.
+
+##Pr(>|t|)= p værdi. hvor vi skal opstille H0, nulhypotese. Vi skal være mr. negativ og sige "der er ikke en 
+##sammenhæng mellem vækst og forbrugertillid" er dette tæt på nul, har vi afvist hypotesen.
+##Da vores p værdi er 3.39e-12 *** Betyder det at det er MEGET tæt på nul.
+
+##Så det super. den hypotese er afvist. (man kan heller ikke have en t værdi der er dårlig (under 2.) 
+##og en lav p-værdi. de to tal siger det samme. Men fungerer som en både at forklare begge ting.
+
+##R2 0,37: DI-FTI forklarer 37 pct. af udsvingene i væksten
+##residual standard error 2,19: modellens gæt ligger typisk cirka 2 procentpoint fra den faktiske vækst
+
 
 summary(lm_dst)
-#Call:
-#lm(formula = realvaekst ~ dst_fti, data = df_fti_vaekst)
-
-#Residuals:
-#  Min     1Q Median     3Q    Max 
-#-5.891 -1.536 -0.060  1.448  8.094 
-
 #Coefficients:
-#  Estimate Std. Error t value Pr(>|t|)    
-#(Intercept)  1.42304    0.23186   6.137 1.55e-08 ***
-#  dst_fti      0.15574    0.02588   6.018 2.68e-08 ***
-#  ---
-#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
-#
+#             Estimate Std. Error t value Pr(>|t|)
+#(Intercept)   1.42304    0.23186   6.137 1.55e-08 ***
+#dst_fti       0.15574    0.02588   6.018 2.68e-08 ***
 #Residual standard error: 2.383 on 104 degrees of freedom
-#Multiple R-squared:  0.2583,	Adjusted R-squared:  0.2511 
-#F-statistic: 36.21 on 1 and 104 DF,  p-value: 2.679e-08
+#Multiple R-squared:  0.2583
 
-
+##R2 0,2583 mod R2 0,3738 for DI-FTI: DST FTI forklarer mindre, win for baum
 
 #funktion der laver Baums tabel (R2 og korrelation) på et udsnit af data
-baum_tabel <- function(d) {
+#test = det stykke data vi giver funktionen, fx alle kvartaler eller kun til 2016K2
+baum_tabel <- function(test) {
   data.frame(
-    Maal = c("Forklaringsgrad (R2)", "Korrelation"),
-    DI_FTI = round(c(summary(lm(realvaekst ~ di_fti, data = d))$r.squared,
-                     cor(d$di_fti, d$realvaekst)), 2),
-    FTI = round(c(summary(lm(realvaekst ~ dst_fti, data = d))$r.squared,
-                  cor(d$dst_fti, d$realvaekst)), 2)
+    Mål = c("Forklaringsgrad (R2)", "Korrelation"),            #rækkerne: det vi måler
+    DI_FTI = round(c(summary(lm(realvaekst ~ di_fti, data = test))$r.squared,   #R2: regression med DI-FTI som X
+                     cor(test$di_fti, test$realvaekst)), 2),                     #korrelation mellem DI-FTI og væksten
+    FTI = round(c(summary(lm(realvaekst ~ dst_fti, data = test))$r.squared,     #samme med DST FTI
+                  cor(test$dst_fti, test$realvaekst)), 2)
   )
 }
 
-#Baums egne tal fra bilaget (boks 1), 2000K1-2016K2
+#vi rekreare Baum's Di FTI fra 2000 til 2016. starter med at samle R2 og korrelation
 df_baum_original <- data.frame(
-  Maal = c("Forklaringsgrad (R2)", "Korrelation"),
+  Mål = c("Forklaringsgrad (R2)", "Korrelation"),
   DI_FTI = c(0.54, 0.73),
   FTI = c(0.42, 0.65)
 )
 
 #vores tal på Baums periode og på alle vores data
-df_r2_kor_baum_periode <- baum_tabel(df_fti_vaekst[df_fti_vaekst$kvartal <= 2016.25, ])   #2016K2 = 2016.25
-df_r2_kor_alle_kvartaler <- baum_tabel(df_fti_vaekst)
+#perioden skal være mindre eller lig med 2016.25 (2016K2). Starten er 2000, for det er der df_fti_vaekst starter
+df_r2_kor_baum_periode <- baum_tabel(df_fti_vaekst[df_fti_vaekst$kvartal <= 2016.25, ])   #kun kvartalerne fra 2000 til og med 2016K2
+df_r2_kor_alle_kvartaler <- baum_tabel(df_fti_vaekst)                                      #alle kvartaler vi har, 2000K1 til 2026K2
 
-nrow(df_fti_vaekst[df_fti_vaekst$kvartal <= 2016.25, ])   #skal være 66 kvartaler, som hos Baum
+#nrow tæller rækkerne i udsnittet, altså hvor mange kvartaler der er med fra 2000 til 2016K2
+#skal være 66, for Baum kører 2000K1 til 2016K2 og det er 66 kvartaler
+nrow(df_fti_vaekst[df_fti_vaekst$kvartal <= 2016.25, ])
 
-df_baum_original
-df_r2_kor_baum_periode
-df_r2_kor_alle_kvartaler
+df_baum_original           #Baums egne tal
+df_r2_kor_baum_periode     #vores tal på hans periode
+df_r2_kor_alle_kvartaler   #vores tal på alle kvartaler
 
+
+#som vi kan se. så er mønsteret det samme fra baum originalen og vores tal på hans periode
+
+#hvis vi tager alle kvartaller er mønsteret der. men vi kan se DST holder en højere korrelation (Estimate)
 ## er forspringet til DI-FTI blevet større eller mindre siden Baum? Sammenlign forskellen i R2 mellem de tre tabeller
 
 
-#plot: begge indikatorer og forbruget i samme figur
+#Så skal der plottes!
+
 #væksten er procent og indikatorerne er nettotal, så væksten får sin egen akse til højre
-skala <- max(abs(df_fti_vaekst$di_fti)) / max(abs(df_fti_vaekst$realvaekst))   #gør væksten lige så høj som indikatorerne
 
-r2_di <- summary(lm_di)$r.squared     #bruges i captionen
-r2_dst <- summary(lm_dst)$r.squared
+#tid til at bruge ggplot2
+#plot: Baums figur efterlignet, men strakt fra hans 2000-2016 til 2026
+#søjler = årlig realvækst i forbruget (højre akse). Linjerne = DI-FTI og DST FTI (venstre akse)
+#den stiplede lodrette linje er 2016K2, hvor Baum slutter. Alt til højre for den er det nye, vi har lagt til
+#væksten er procent og indikatorerne er nettotal, så væksten ganges med skala og får sin egen akse til højre
 
+library(ggplot2)
+
+#Baums figur efterlignet: søjler = forbrugets vækst, linjer = tillidsindikatorerne
 #tid til at bruge ggplot2
 library(ggplot2)
 
+skala <- 4   #højre akse (procent) er venstre akse (nettotal) delt med 4
+
 ggplot(df_fti_vaekst, aes(x = kvartal)) +
-  geom_bar(aes(y = realvaekst * skala, fill = "Årlig realvækst i forbruget (højre akse)"),
-           stat = "identity", width = 0.2) +                            #søjler = forbrugets vækst
-  geom_line(aes(y = di_fti, color = "DI-FTI"), linewidth = 1) +         #linje = DI-FTI
-  geom_line(aes(y = dst_fti, color = "DST FTI"), linewidth = 1) +       #linje = DST FTI
-  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +  #nul-linje
-  geom_vline(xintercept = 2016.25, linetype = "dashed") +               #2016K2 = slutningen af Baums periode
-  annotate("text", x = 2016.25, y = max(df_fti_vaekst$di_fti), label = "2016K2 (Baum)",
-           hjust = 1.05, size = 3) +
-  scale_x_continuous(breaks = seq(2000, 2026, by = 2)) +
-  scale_y_continuous(name = "Nettotal",
-                     sec.axis = sec_axis(~ . / skala, name = "Pct.")) +   #den ekstra akse til højre
-  scale_fill_manual(name = NULL, values = c("Årlig realvækst i forbruget (højre akse)" = "pink")) +
-  scale_color_manual(name = NULL, values = c("DI-FTI" = "black", "DST FTI" = "darkgreen")) +
-  labs(x = NULL,
-       title = paste0("DI-FTI og DST FTI mod privatforbruget, 2000K1-", seneste_tekst),
-       caption = paste0("Forklaringsgrad (R²): DI-FTI ", round(r2_di, 2), ", DST FTI ", round(r2_dst, 2),
+  geom_bar(aes(y = realvaekst * skala), stat = "identity", fill = "hotpink") +   #søjler = årlig realvækst
+  geom_line(aes(y = dst_fti, color = "DST FTI"), linewidth = 0.8, linetype = "14", lineend = "round") +
+  geom_line(aes(y = di_fti, color = "DI-FTI"), linewidth = 0.8) +
+  geom_vline(xintercept = 2016.25, linetype = "dotted") +   #2016K2, hvor Baum slutter
+  scale_x_continuous(expand = c(0, 0), breaks = seq(2000, 2026, by = 1)) +   #hvert år
+  scale_y_continuous(name = "Nettotal", sec.axis = sec_axis(~ . / skala, name = "Pct.")) +   #højre akse = venstre delt med skala
+  scale_color_manual(values = c("DI-FTI" = "blue", "DST FTI" = "black")) +
+  labs(x = "Årstal", color = NULL,
+       title = "DI-FTI følger privatforbruget bedre end DST FTI",
+       subtitle = paste0("Tillidsindikatorer og årlig realvækst, 2000K1-", seneste_tekst, ". Søjler: årlig realvækst i pct. Prikket linje er 2016K2"),
+       caption = paste0("Forklaringsgrad (R2): DI-FTI ", round(summary(lm_di)$r.squared, 2),
+                        ", DST FTI ", round(summary(lm_dst)$r.squared, 2),
                         ".\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
-  theme_classic() +
-  theme(legend.position = "top")
-
-## kig på plottet: hvad sker der i 2020 (Corona) og 2022 (inflation)? Det skal med i vurderingen
-
-
+  #Lets make it a nice, med vinkler og størrelsse
+  theme_bw() +
+  theme(legend.position = "top",
+        panel.background = element_rect(fill = "lightgrey"),   #mørk baggrund inde i figuren
+        legend.key = element_rect(fill = "lightgrey"),   #mørk baggrund bag stregerne i forklaringen
+        legend.text = element_text(size = 20),   #DI-FTI og DST FTI
+        legend.key.width = unit(2, "cm"),   #længere streger i forklaringen
+        axis.title.y = element_text(angle = 0),   #"Nettotal" vandret
+        axis.title.y.right = element_text(angle = 0),   #"Pct." vandret
+        plot.title = element_text(size = 20),   #titlen
+        plot.subtitle = element_text(size = 15),   #undertitlen
+        plot.caption = element_text(size = 10),   #teksten nederst
+        axis.title = element_text(size = 15),   #"Nettotal", "Pct." og "Årstal"
+        axis.text = element_text(size = 8))   #tallene på akserne
 #Corona og krig: er det dem der gør R2 lavere end hos Baum? Vi tester det og gætter ikke
 #funktion der regner R2 og korrelation på ét udsnit
-r2_kor_udsnit <- function(d, navn) {
+r2_kor_udsnit <- function(test, navn) {
   data.frame(
     Udsnit = navn,
-    Kvartaler = nrow(d),
-    R2_DI = round(summary(lm(realvaekst ~ di_fti, data = d))$r.squared, 2),
-    R2_DST = round(summary(lm(realvaekst ~ dst_fti, data = d))$r.squared, 2),
-    Kor_DI = round(cor(d$di_fti, d$realvaekst), 2),
-    Kor_DST = round(cor(d$dst_fti, d$realvaekst), 2)
+    Kvartaler = nrow(test),
+    R2_DI = round(summary(lm(realvaekst ~ di_fti, data = test))$r.squared, 2),
+    R2_DST = round(summary(lm(realvaekst ~ dst_fti, data = test))$r.squared, 2),
+    Kor_DI = round(cor(test$di_fti, test$realvaekst), 2),
+    Kor_DST = round(cor(test$dst_fti, test$realvaekst), 2)
   )
 }
 

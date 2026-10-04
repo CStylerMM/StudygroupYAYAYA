@@ -144,6 +144,7 @@ youngmomsmeta <- get_eurostat_dsd("demo_r_fagec3")
 unique(youngmomsmeta$concept)         #Hvad er der?
 #"freq" "age"  "unit" "geo" 
 youngmomsmeta %>% filter(concept=="age") %>% select(code) %>% unique()
+<<<<<<< Updated upstream
 
 
 #data fra eurostat
@@ -302,4 +303,34 @@ bvmerge %>% filter(age=='Y15-19') %>%
   facet_wrap(~age)
 
 colnames()
+=======
+>>>>>>> Stashed changes
 
+
+#data fra eurostat
+#vi laver en liste
+myfilter=list(
+  age=c("Y10-14","Y15-19"),
+  geo=c("^DE.*", "DK.*", "ES.*", "RO.*", "FI.*", "HU.*"))
+  
+  
+clean_restatapi_cache()
+youngmomsDF = get_eurostat_data("demo_r_fagec3",
+                                filters = myfilter,
+                                date_filter= "2000":"2026"
+                                )  
+#Prepare date for Germany
+youngmomsDFDE = youngmomsDF[grepl("DE.*", youngmomsDF$geo),]
+youngmomsDFDE$nut0 = grepl("DE$", youngmomsDFDE$geo)
+youngmomsDFDE$nut1 = grepl("DE[0-9]{1}$", youngmomsDFDE$geo)
+youngmomsDFDE$nut2 = grepl("DE[0-9]{2}$", youngmomsDFDE$geo)
+youngmomsDFDE$nut3 = grepl("DE[0-9]{3}$", youngmomsDFDE$geo)
+#youngmomsDFDE %>% filter(nut1==T %>% count()
+
+  
+ 
+
+ 
+  
+  
+  

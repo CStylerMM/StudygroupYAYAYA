@@ -599,6 +599,38 @@ df_aarsvaekst_di_nb_model
 
 di_2026 - aarsvaekst_antaget   #hvor mange procentpoint ligger vores model under DI?
 
+library(ggplot2)
+
+prognose <- data.frame(
+  model = c("DI-FTI", "DST FTI"),
+  fit   = c(-0.27, -0.79),
+  lwr   = c(-4.61, -5.54),
+  upr   = c( 4.06,  3.96)
+)
+
+ggplot(prognose, aes(x = fit, y = model, colour = model)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_errorbarh(aes(xmin = lwr, xmax = upr), height = 0.25, linewidth = 2) +
+  geom_point(size = 4) +
+  geom_text(aes(label = paste0("[", format(lwr, decimal.mark = ","), " ; ",
+                               format(upr, decimal.mark = ","), "]")),
+            vjust = 2.4, size = 4.2, show.legend = FALSE) +
+  scale_colour_manual(values = c("DI-FTI" = "blue", "DST FTI" = "#E6007E")) +
+  scale_x_continuous(limits = c(-6, 5), breaks = seq(-6, 4, 2)) +
+  labs(
+    title    = "Prognosen ligger tæt på nul, men usikkerheden er stor",
+    subtitle = "Forudsagt årlig realvækst i privatforbruget, 2026K3, med 95%-prædiktionsinterval",
+    x        = "Årlig realvækst, pct.",
+    y        = NULL,
+    caption  = "Kilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "none",
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(face = "bold"))
+
+ggsave("opg2_2_prognose.png", width = 6.5, height = 4.5, dpi = 300)
+
 ## i rapporten: årsvæksten er en tilnærmelse (gennemsnit af kvartalernes vækst), 
 #og K4 er en antagelse, ikke en forudsigelse
 
@@ -671,17 +703,17 @@ library(ggplot2)
 
 #residualer mod modellens gæt. En god model giver punkter spredt tilfældigt omkring nul
 ggplot(df_fti_vaekst, aes(x = est_di, y = res_di)) +
-  geom_point(color = "black") +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +   #nul = modellen ramte rigtigt
+  geom_point(color = "blue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +   #nul = modellen ramte rigtigt
   labs(x = "Estimeret vækst (DI-FTI), pct.", y = "Residual, procentpoint",
        title = "Residualer mod estimerede værdier, DI-FTI",
        caption = paste0("Modellen afviger typisk med ", round(sd(df_fti_vaekst$res_di), 2),
                         " procentpoint.\nKilde: Danmarks Statistik (FORV1, NKH1) og egne beregninger")) +
-  theme_classic()
+  theme_classic(ink = "black")
 
 ggplot(df_fti_vaekst, aes(x = est_dst, y = res_dst)) +
-  geom_point(color = "darkgreen") +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +
+  geom_point(color = "hotpink") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
   labs(x = "Estimeret vækst (DST FTI), pct.", y = "Residual, procentpoint",
        title = "Residualer mod estimerede værdier, DST FTI",
        caption = paste0("Modellen afviger typisk med ", round(sd(df_fti_vaekst$res_dst), 2),
@@ -692,8 +724,8 @@ ggplot(df_fti_vaekst, aes(x = est_dst, y = res_dst)) +
 ggplot(df_fti_vaekst, aes(x = kvartal)) +
   geom_point(aes(y = res_di, color = "DI-FTI")) +
   geom_point(aes(y = res_dst, color = "DST FTI")) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "hotpink") +
-  scale_color_manual(name = NULL, values = c("DI-FTI" = "black", "DST FTI" = "darkgreen")) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  scale_color_manual(name = NULL, values = c("DI-FTI" = "blue", "DST FTI" = "hotpink")) +
   labs(x = NULL, y = "Residual, procentpoint",
        title = "Residualer over tid",
        caption = paste0("Modellerne gætter for lavt de seneste fire kvartaler: i snit ", round(mean(tail(df_fti_vaekst$res_di, 4)), 2),

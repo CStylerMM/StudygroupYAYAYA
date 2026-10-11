@@ -1,0 +1,250 @@
+#tid til at lave vores egen mikroindikator
+#er mikroindikatoren bedre end dst og DI?
+#brug data fra 1. kvartal til 3.kvartal 2026 (nyeste tid)
+library(dkstat)
+#lad os hente det ned med dkstat
+#X: forbrugertillid. DST giver den månedligt, så den skal omregnes til kvartaler, så det matcher yyyyyyyyyy
+voresfti1 <- dst_meta(table = "FORV1", lang = "da")
+
+#de 8 spørgsmål der indgår i vores mikro er  (F2,F3,F9,F10,F11,F12,F13,)
+unique(voresfti1)
+voresfti1$values$INDIKATOR
+
+
+voresfti_query <- list(
+  INDIKATOR = c(
+    "Familiens økonomiske situation i dag, sammenlignet med for et år siden",
+    "Familiens økonomiske  situation om et år, sammenlignet med i dag",
+    "Priser i dag, sammenlignet med for et år siden",
+    "Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
+    "Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.",
+    "Anser det som fornuftigt at spare op i den nuværende økonomiske situation",
+    "Regner med at kunne spare op i de kommende 12 måneder",
+    "Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener"
+  ),
+  Tid = "*"
+)
+
+voresFTI_mikro<- dst_get_data(
+  table = "FORV1",
+  query = voresfti_query,
+  meta_data = voresfti1,
+  lang = "da"
+)
+unique(voresFTI_mikro$INDIKATOR)
+
+
+
+
+
+
+
+
+
+### --- BEDSTE INDIKATOR QUEST --- ###
+#Vi laver en der samler alle 11 spørgsmål
+
+FTIALLEINDI_query <- list(
+  INDIKATOR = "*",
+  Tid = "*"
+)
+
+FTIALLEINDI<- dst_get_data(
+  table = "FORV1",
+  query = FTIALLEINDI_query,
+  meta_data = voresfti1,
+  lang = "da"
+)
+
+#Lad os lige rense FTI ALLE INDI
+#først lad os se hvad der sker
+unique(FTIALLEINDI$INDIKATOR)
+
+#fjerner F11 fra INDIKATOR
+FTIALLEINDI_11_spg <- FTIALLEINDI[!grepl("^F11|^F1 ", FTIALLEINDI$INDIKATOR), ]
+#beholder kun tid fra 1999 og frem
+FTIALLEINDI_11_spg <- FTIALLEINDI_11_spg[FTIALLEINDI_11_spg$TID >= as.Date("2000-01-01"), ]
+
+
+sum(is.na(FTIALLEINDI_11_spg$value))  #antal NA i value (1460 i alle. nu det 0 jibiii
+
+#skal laves til kvartaler
+
+#tager kun F2 og sætter månederne i rækkefølge
+df_spm <- FTIALLEINDI_11_spg[grepl("^F2 ", FTIALLEINDI_11_spg$INDIKATOR), ]
+df_spm <- df_spm[order(df_spm$TID), ]
+
+#3 rækker pr. kolonne, så hver kolonne er et kvartal (jan-feb-mar osv.)
+matrix(df_spm$value, nrow = 3)[, 1:2]  #kig på de to første kvartaler
+
+#gennemsnit af hver kolonne = ét tal pr. kvartal
+spm_kvartal <- colMeans(matrix(df_spm$value, nrow = 3))
+head(spm_kvartal)
+
+#sorterede måneder, bruges til at lave kvartalsnavne
+måneder <- sort(unique(FTIALLEINDI_11_spg$TID))
+format(måneder[1], "%m")  #skal være "01"
+length(måneder) %% 3      #skal være 0, ellers er sidste kvartal ikke fuldt
+
+første_måned <- måneder[seq(1, length(måneder), by = 3)]  #første måned i hvert kvartal
+df_kvartal <- data.frame(kvartal = paste0(format(første_måned, "%Y"), "K",
+                                          (as.numeric(format(første_måned, "%m")) - 1) %/% 3 + 1))
+
+spørgsmål <- unique(FTIALLEINDI_11_spg$INDIKATOR)
+
+for (i in spørgsmål) {
+  df_spm <- FTIALLEINDI_11_spg[FTIALLEINDI_11_spg$INDIKATOR == i, ]
+  df_spm <- df_spm[order(df_spm$TID), ]
+  df_kvartal[[i]] <- colMeans(matrix(df_spm$value, nrow = 3))  #ny kolonne pr. spørgsmål
+}
+
+dim(df_kvartal)  #kolonner skal være 12: kvartal + 11 spørgsmål
+head(df_kvartal)
+
+#de 11 spørgsmål i første kvartal som en almindelig talrække
+første_kvartal <- unlist(df_kvartal[1, 2:ncol(df_kvartal)])
+
+kombi_par <- combn(første_kvartal, 2)  #alle par af spørgsmål
+dim(kombi_par)  #2 rækker, og så et antal kolonner, én pr. par
+
+choose(11, 2)  #antal par, skal være det samme som antal kolonner
+
+indikator_par <- colMeans(kombi_par)  #gennemsnit pr. par = indikatorværdi for 1. kvartal
+head(indikator_par)
+
+sum(choose(11, 1:11))
+
+antal_spm <- ncol(df_kvartal) - 1  #11 spørgsmål
+alle_kombi <- list()  #ét element pr. kombinationsstørrelse
+
+for (j in 1:antal_spm) {
+  kombi_matrix <- matrix(NA, nrow = nrow(df_kvartal), ncol = choose(antal_spm, j))  #tom matrix til størrelse j
+  for (i in 1:nrow(df_kvartal)) {
+    kvartal_tal <- unlist(df_kvartal[i, 2:ncol(df_kvartal)])  #spørgsmålene i kvartal i
+    kombi_matrix[i, ] <- colMeans(combn(kvartal_tal, j))  #gennemsnit af hver kombination
+  }
+  alle_kombi[[j]] <- kombi_matrix
+}
+
+sapply(alle_kombi, ncol)  #11 55 165 330 462 462 330 165 55 11 1
+sum(sapply(alle_kombi, ncol))  #skal give 2047 og det gør det
+
+
+### --- Indikator projekt - alle indikatore --- ###
+
+indikator_liste <- rep(list(rep(list())), 11)
+z_length <- length(df_kvartal[ , 2:ncol(df_kvartal)])
+
+for (z_length in 1:z_length) {
+  l <- length(colMeans(matrix(as.numeric(combn(df_kvartal[i,2:ncol(df_kvartal)], z_length)), nrow = z_length)))
+  df_combi_d <- matrix(0, nrow = nrow(df_kvartal), ncol = l)
+  for (i in 1:nrow(df_kvartal)) {
+    df_combi_d[i, ] <- colMeans(matrix(as.numeric(combn(df_kvartal[i,2:ncol(df_kvartal)], z_length)), nrow = z_length))
+    indikator_liste[[z_length]] <- df_combi_d
+  }
+}
+
+samlet_indikator_df_combi <- data.frame(indikator_liste)
+
+
+### --- Lave LM på dem, OLA3? --- ###
+
+# Nu skal vi jo bruge vores y :))
+
+nkh1_meta <- dst_meta(table = "NKH1", lang = "da")
+
+df_forbrug <- dst_get_data(
+  table = "NKH1",
+  TRANSAKT = "P.31 Husholdningernes forbrugsudgifter",
+  PRISENHED = "2020-priser, kædede værdier",
+  SÆSON = "Sæsonkorrigeret",
+  Tid = "*",
+  meta_data = nkh1_meta,
+  lang = "da"
+)
+
+df_forbrug <- df_forbrug[order(df_forbrug$TID), ]
+head(df_forbrug, 1)  #starter 1990K1
+tail(df_forbrug, 1)  #slutter 2026K2
+
+#derefter laver vi forbruget om til en tidsserie og regner væksten i forhold til samme kvartal året før
+ts_forbrug <- ts(df_forbrug$value, start = c(1990, 1), frequency = 4)
+vaekst <- (exp(diff(log(as.numeric(ts_forbrug)), lag = 4)) - 1) * 100
+ts_realvaekst <- ts(vaekst, start = c(1991, 1), frequency = 4)
+
+#nu kan vi starte i 2000K1, ligesom DI
+ts_realvaekst_fra2000 <- window(ts_realvaekst, start = c(2000, 1))
+end(ts_realvaekst_fra2000)  #seneste kvartal med vækst: 2026K2
+
+df_vaekst_kvartal <- data.frame(
+  kvartal = round(as.numeric(time(ts_realvaekst_fra2000)), 2),
+  realvaekst = as.numeric(ts_realvaekst_fra2000)
+)
+
+df_kvartal_clean <- samlet_indikator_df_combi[-107, ]
+
+samlet_indikator_forbrug <- cbind(df_vaekst_kvartal, df_kvartal_clean)
+
+
+# Loope lm :))
+
+lm_indikator_liste <- rep(list(rep(list())), 2047)
+
+for (i in 3:ncol(samlet_indikator_forbrug)) {
+  lm_indikator <- lm(realvaekst ~ i, data = samlet_indikator_forbrug)
+  sum_lm_indikator <- summary(lm_indikator)
+  lm_indikator_liste[[i]] <- sum_lm_indikator
+}
+
+
+t_lm_indikator_liste <- rep(list(rep(list())), 2047)
+
+i = samlet_indikator_forbrug[ ,3]
+
+t_lm_indikator <- lm(realvaekst ~ i, data = samlet_indikator_forbrug)
+t_sum_lm_indikator <- summary(t_lm_indikator)
+
+
+
+
+
+
+t_lm_indikator_liste[[i]] <- t_sum_lm_indikator
+
+
+
+test <- lm(realvaekst ~ X1, data = samlet_indikator_forbrug)
+sum_test <- summary(test)
+R2_liste[[z_length]] <- sum_test
+
+
+
+
+
+
+
+
+
+
+#Lav LM loop opg 1.
+
+
+
+
+### --- TEEEEEST --- ###
+
+# Hvordan man navngiver kolonner i loop - opgave 2.
+
+#Sim det der med navne
+
+col_names <- c("F2", "F3", "F4", "F5", "F9", "F6", "F7", "F8", "F10", "F12", "F13" )
+
+t_l <- length(colMeans(matrix(as.numeric(combn(df_kvartal[1,2:ncol(df_kvartal)], 1)), nrow = 1)))
+t_df_combi_d <- matrix(0, nrow = nrow(df_kvartal), ncol = t_l)
+t_names <- combn(col_names, 1)
+t_names <- combn(col_names, 1, paste, collapse = ",")
+colnames(t_df_combi_d) <- t_names
+
+t_df_combi_d[i, ] <- colMeans(matrix(as.numeric(combn(df_kvartal[i,2:ncol(df_kvartal)], z_length)), nrow = z_length))
+indikator_liste[[z_length]] <- df_combi_d
+

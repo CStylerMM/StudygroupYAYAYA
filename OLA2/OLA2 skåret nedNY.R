@@ -1,3 +1,171 @@
+
+#tid til at lave vores egen mikroindikator
+#er mikroindikatoren bedre end dst og DI?
+#brug data fra 1. kvartal til 3.kvartal 2026 (nyeste tid)
+library(dkstat)
+#lad os hente det ned med dkstat
+#X: forbrugertillid. DST giver den månedligt, så den skal omregnes til kvartaler, så det matcher yyyyyyyyyy
+voresfti1 <- dst_meta(table = "FORV1", lang = "da")
+
+#de 8 spørgsmål der indgår i vores mikro er  (F2,F3,F9,F10,F11,F12,F13,)
+unique(voresfti1)
+voresfti1$values$INDIKATOR
+
+
+voresfti_query <- list(
+  INDIKATOR = c(
+   "Familiens økonomiske situation i dag, sammenlignet med for et år siden",
+  "Familiens økonomiske  situation om et år, sammenlignet med i dag",
+ "Priser i dag, sammenlignet med for et år siden",
+"Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
+"Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.",
+"Anser det som fornuftigt at spare op i den nuværende økonomiske situation",
+"Regner med at kunne spare op i de kommende 12 måneder",
+"Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener"
+),
+Tid = "*"
+)
+
+voresFTI_mikro<- dst_get_data(
+  table = "FORV1",
+  query = voresfti_query,
+  meta_data = voresfti1,
+  lang = "da"
+)
+unique(voresFTI_mikro$INDIKATOR)
+
+#Vi laver en der samler alle 11 spørgsmål
+
+FTIALLEINDI_query <- list(
+  INDIKATOR = "*",
+  Tid = "*"
+)
+
+FTIALLEINDI<- dst_get_data(
+  table = "FORV1",
+  query = FTIALLEINDI_query,
+  meta_data = voresfti1,
+  lang = "da"
+)
+
+#Lad os lige rense FTI ALLE INDI
+#først lad os se hvad der sker
+unique(FTIALLEINDI$INDIKATOR)
+
+#fjerner F11 fra INDIKATOR
+
+FTIALLEINDI_11_spg <- FTIALLEINDI[!grepl("^F11|^F1 ", FTIALLEINDI$INDIKATOR), ]
+#beholder kun tid fra 1999 og frem
+FTIALLEINDI_11_spg <- FTIALLEINDI_11_spg[FTIALLEINDI_11_spg$TID >= as.Date("1999-01-01"), ]
+
+
+sum(is.na(FTIALLEINDI_11_spg$value))  #antal NA i value (1460 i alle. nu det 0 jibiii
+
+#skal laves til kvartaler
+#månederne i rækker, spørgsmålene i kolonner
+df_forv_måned <- as.data.frame(pivot_wider(FTIALLEINDI_11_spg, id_cols = "TID", names_from = "INDIKATOR", values_from = "value"))
+df_forv_måned <- df_forv_måned[order(df_forv_måned$TID), ]
+unique(FTIALLEINDI_11_spg$INDIKATOR)
+#kvartal til hver måned, fx 2000K1
+kvartal <- paste0(format(df_forv_måned$TID, "%Y"), "K", ceiling(as.numeric(format(df_forv_måned$TID, "%m")) / 3))
+
+#gennemsnit pr. kvartal for alle spørgsmål
+df_kvartal <- aggregate(df_forv_måned[, -1], by = list(kvartal = kvartal), FUN = mean)
+FTIALLEINDI_m_kva <- df_kvartal  #kvartalsdata, kvartal i kolonne 1
+
+FTIALLEINDI_m_kva[1, ]  #første kvartal, de 11 tal du sammenligner med
+combn(FTIALLEINDI_m_kva[1, 2:ncol(FTIALLEINDI_m_kva)], 1)  #hvert spørgsmål alene
+
+
+
+#LAD OS FOR FANDEN COMBINE JAJAJJAJJAJAJAJAJJAJA
+combn(FTIALLEINDI_11_spg[1,2:ncol(FTIALLEINDI_11_spg],1 )
+?combn
+
+
+#Overstående er hermed hentet ned - og første  for mikro indikator anden er for ALLE spgmål
+
+#Nu hiver vi realvækst ned via NKH1
+
+forbrug_meta <- dst_meta(table = "NKH1", lang = "da")
+
+valgt_tid <- forbrug_meta$values$Tid$text
+
+forbrug_meta$values$Tid
+
+periode <- valgt_tid[valgt_tid >= "1999K1"]
+
+forbrug_meta_query <- list(
+  TRANSAKT = "P.31 Husholdningernes forbrugsudgifter",
+  PRISENHED ="2020-priser, kædede værdier",
+  SÆSON = "Sæsonkorrigeret",
+  Tid = valgt_tid
+)
+
+
+#forbrug_meta$variables
+#forbrug_meta$values$
+
+
+
+forbrug_raw <- dst_get_data(
+  table = "NKH1",
+  query = forbrug_meta_query,
+  meta_data = forbrug_meta,
+  lang = "da"
+)
+
+#filtrerer
+
+#subset
+
+forbrug_sub <- forbrug_raw[-(1:36), ]
+
+forbrug_sub <- forbrug_sub[ ,-(2:3)]
+
+# Lave realvøkst i forbrug - tjek
+forbrug_real <- (diff(log(as.numeric(forbrug_sub$value)), lag = 4)) * 100
+forbrug_real <- (exp(diff(log(as.numeric(forbrug_sub$value)), lag = 4)) -1) * 100
+forbrug_real <- data.frame(forbrug_real)
+
+# Lave timeserie
+voresFTI_mikro_sub <- voresFTI_mikro[-(1:303),]
+
+head(voresFTI_mikro_sub)
+library(tidyverse)
+
+mikro_sub_wide <- pivot_wider(voresFTI_mikro_sub,id_cols = "INDIKATOR", names_from = "TID", values_from = "value")
+
+
+class(voresFTI_mikro_sub$TID)
+
+mikro_sub_wide_m_gnmsnit <- mikro_sub_wide %>%
+  bind_rows(
+    mikro_sub_wide %>%
+      summarise(across(-INDIKATOR, ~ mean(.x, na.rm = TRUE))) %>%
+      mutate(INDIKATOR = "Gnm. snit")
+  )
+
+vi_hiver_gnmsnit_ud <- mikro_sub_wide_m_gnmsnit %>%
+  filter(INDIKATOR == "Gnm. snit") %>%
+  select(-INDIKATOR)
+
+mikroFBT_ts <- ts(t(vi_hiver_gnmsnit_ud), start = c(2000, 1), frequency = 12)
+mikroFBT_ts_kvt <- aggregate(mikroFBT_ts, nfrequency = 3)/4
+
+forbrugertillid_kvt <- data.frame(round(as.numeric(mikroFBT_ts_kvt), 1))
+
+
+forbrugertillid_kvt$tidinterval <- paste0(floor(time(mikroFBT_ts_kvt)), "K", cycle(mikroFBT_ts_kvt))
+
+
+
+
+
+
+
+
+
 #OLA 2, opgave 1 - Boliger og DST
 
 #### Opgave 1.1 – Det første skridt ####
@@ -194,16 +362,21 @@ library(ggplot2)
 
 forskel_pct <- round((max(df_kvmpris_bycat$kvmpris) / min(df_kvmpris_bycat$kvmpris) - 1) * 100)  #hvor mange procent højeste er over laveste
 
+dk_kr <- function(x) paste0(format(round(x), big.mark = ".", decimal.mark = ",", trim = TRUE), " kr.")
+
 ggplot(df_kvmpris_bycat, aes(x = bycat, y = kvmpris)) +
-  geom_bar(stat = "identity", fill = "pink", width = 0.7) +  #søjlerne får den højde vi selv har regnet
-  geom_text(aes(label = paste0(round(kvmpris), " kr.\n(n = ", antal, ")")), vjust = -0.3, size = 3.5) +  #pris og antal over søjlen
-  scale_y_continuous(limits = c(0, 30000), expand = c(0, 0)) +  #aksen går fra 0 til 30.000 kr. pr. m²
-  labs(title = "Gennemsnitlig pris pr. m² efter bykategori",
-       x = "Bykategori", y = "Kr. pr. m²",
-       caption = paste0(hoejeste, " har den højeste pris pr. m² (", round(max(df_kvmpris_bycat$kvmpris)),
-                        " kr.), ", forskel_pct, " % over laveste, ", laveste, " (", round(min(df_kvmpris_bycat$kvmpris)),
-                        " kr.).\nKilde: Boligsiden og Danmarks Statistik (BY3)")) +
-  theme_bw()  #hvid baggrund med gitterlinjer og ramme
+  geom_bar(stat = "identity", fill = "pink", width = 0.7) +
+  geom_text(aes(label = dk_kr(kvmpris)), vjust = -0.5, size = 5) +
+  scale_y_continuous(limits = c(0, 30000), expand = c(0, 0), labels = dk_kr) +
+  labs(
+    title = "Gennemsnitlig pris pr. m² efter bykategori",
+    x = "Bykategori", y = "Kr. pr. m²",
+    caption = "Kilde: Boligsiden og Danmarks Statistik (BY3)"
+  ) +
+  theme_bw(base_size = 16) +
+  theme(
+    plot.title = element_text(size = 20, face = "bold")
+  )
 ## vi vender tilbage og ser på hvorfor kategorierne koster det de gør
 
 
@@ -599,6 +772,30 @@ df_aarsvaekst_di_nb_model
 
 di_2026 - aarsvaekst_antaget   #hvor mange procentpoint ligger vores model under DI?
 
+#Her er DI
+mean(df_fti_vaekst$di_fti[df_fti_vaekst$kvt_nr == 3])  #gns. DI-FTI i alle 3. kvartaler
+mean(df_fti_vaekst$di_fti[df_fti_vaekst$kvt_nr == 4])  #gns. DI-FTI i alle 4. kvartaler
+
+#antal gange 4.kvartal>3.kvar
+tredje_di <- df_fti_vaekst$di_fti[df_fti_vaekst$kvt_nr == 3]  #DI-FTI i alle 3. kvartaler
+fjerde_di <- df_fti_vaekst$di_fti[df_fti_vaekst$kvt_nr == 4]  #DI-FTI i alle 4. kvartaler
+tredje_di <- tredje_di[1:length(fjerde_di)]  #samme antal år i begge
+
+sum(fjerde_di > tredje_di)  #antal år hvor tilliden var højere i K4 end i K3
+
+tredje_dst <- df_fti_vaekst$dst_fti[df_fti_vaekst$kvt_nr == 3]  #samme for DST-FTI
+fjerde_dst <- df_fti_vaekst$dst_fti[df_fti_vaekst$kvt_nr == 4]
+tredje_dst <- tredje_dst[1:length(fjerde_dst)]
+
+sum(fjerde_dst > tredje_dst)  #antal år hvor DST-tilliden var højere i K4 end i K3
+#vi får et år er er ens med vores antagelse
+
+
+
+#så det dst
+mean(df_fti_vaekst$realvaekst[df_fti_vaekst$kvt_nr == 3])  #gns. realvækst i alle 3. kvartaler
+mean(df_fti_vaekst$realvaekst[df_fti_vaekst$kvt_nr == 4])  #gns. realvækst i alle 4. kvartaler
+
 library(ggplot2)
 
 prognose <- data.frame(
@@ -742,6 +939,64 @@ sd(df_fti_vaekst$res_dst)
 sd(df_fti_vaekst$realvaekst)     #til sammenligning: hvor meget svinger selve væksten?
 
 
+#### K4-tjek: ligner 4. kvartal 3. kvartal? ####
+df_fti_vaekst$kvt_nr <- round((df_fti_vaekst$kvartal %% 1) * 4) + 1  #2000.75 bliver til kvartal 4
+
+tredje <- df_fti_vaekst$realvaekst[df_fti_vaekst$kvt_nr == 3]  #vækst i alle 3. kvartaler
+fjerde <- df_fti_vaekst$realvaekst[df_fti_vaekst$kvt_nr == 4]  #vækst i alle 4. kvartaler
+tredje <- tredje[1:length(fjerde)]  #samme antal år i begge
+
+mean(fjerde > 0)  #andel af 4. kvartaler med positiv vækst
+mean(df_fti_vaekst$realvaekst > 0)  #andel af ALLE kvartaler med positiv vækst, til sammenligning
+cor(tredje, fjerde)  #hvor tæt følger K4 K3
+mean(fjerde - tredje)  #i snit hvor meget højere/lavere K4 er end K3
+
+
+#### Slide 2.4: 2026 kvartal for kvartal ####
+df_året <- data.frame(
+  kvartal = c("K1", "K2", "K3", "K4"),
+  vækst   = c(2.99, 2.75, -0.27, -0.27),
+  type    = c("Faktisk", "Faktisk", "Prognose (DI-FTI)", "Antagelse: K4 = K3")
+)  #2026 kvartal for kvartal
+
+library(ggplot2)  #tid til at bruge ggplot2
+ggplot(df_året, aes(x = kvartal, y = vækst, fill = type)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = format(vækst, decimal.mark = ",")),
+            vjust = ifelse(df_året$vækst > 0, -0.5, 1.5)) +  #tal over/under søjlen
+  geom_hline(yintercept = 1.8, linetype = "dashed") +  #DI og Nationalbanken
+  geom_hline(yintercept = 1.30, color = "blue") +  #vores model
+  annotate("text", x = 4.4, y = 2.0, label = "DI og Nationalbanken: 1,8 %", hjust = 1) +
+  annotate("text", x = 4.4, y = 1.1, label = "Vores model: 1,3 %", hjust = 1, color = "blue") +
+  scale_fill_manual(values = c("Faktisk" = "grey50",
+                               "Prognose (DI-FTI)" = "hotpink",
+                               "Antagelse: K4 = K3" = "pink")) +
+  theme_classic() +
+  labs(x = "2026", y = "Årlig realvækst i privatforbruget, pct.", fill = NULL,
+       title = "Vores model giver 1,3 % for 2026, DI og Nationalbanken 1,8 %",
+       caption = "K4 sat lig K3: historisk følger K4 K3 tæt (korrelation 0,77, gns. forskel 0,03 pp).\nKilde: Danmarks Statistik (NKH1, FORV1), DI (maj 2026), Nationalbanken (sep. 2026) og egne beregninger")
+
+ggsave("slide_prognose_året.png", width = 9, height = 5, dpi = 300)  #gemmer til slide
+
+
+
+View(df_tredje_fjerde)  #alle år fra 2000 til 2025, K3 og K4 side om side
+
+table(df_tredje_fjerde$samme_retning)  #antal år hvor de går samme vej (TRUE) og modsat (FALSE)
+df_tredje_fjerde[df_tredje_fjerde$samme_retning == FALSE, ]  #de år hvor K3 og K4 går hver sin vej
+
+library(ggplot2)  #tid til at bruge ggplot2
+ggplot(df_tredje_fjerde, aes(x = K3, y = K4)) +
+  geom_point(color = "hotpink", size = 3) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +  #linjen hvor K4 = K3
+  geom_hline(yintercept = 0, color = "grey70") +
+  geom_vline(xintercept = 0, color = "grey70") +
+  geom_text(aes(label = år), vjust = -0.8, size = 3) +  #årstal ved hvert punkt
+  theme_classic() +
+  labs(x = "Årlig realvækst i 3. kvartal, pct.",
+       y = "Årlig realvækst i 4. kvartal, pct.",
+       title = "4. kvartal følger 3. kvartal tæt",
+       caption = "Punkter tæt på den stiplede linje betyder K4 ≈ K3.\nKilde: Danmarks Statistik (NKH1) og egne beregninger")
 #### Opgave 3.3 – RSS og TSS ####
 #Med udgangspunkt i jeres besvarelse i opgave 3.1, bedes I beregne residualer for henholdsvis DI’s
 #og DST’s forbrugertillidsindikator og plot disse i forhold til jeres forudsagte resultater fra opgave
@@ -985,340 +1240,144 @@ forbrug_2020_2023_NAHC21[which.max(forbrug_2020_2023_NAHC21$Procent_ændring), ]
 # Andre vare og tjenester er steget mest med 19.03%
 
 
-
 ### Opgave 4.4 - De 11 grupper af forbrug
 # Lav 22 simple lineære regressioner mellem hver af de 11 grupper i forbruget (y-variable) og
 # henholdsvis forbrugertillidsindikatoren fra DST og DI. I skal gemme summary i 22 lister. I skal
 # lave jeres regressioner fra 1. kvartal 2000 til og med 2. kvartal 2023.
 
-# Hente samlet forbrugertillidsindekator - DST
-fTillid_sub_lm <- ftillid_kvt_df[-(1:16), ]
-
-# Hente samlet forbrugertillidsindekator - DI
-library(dkstat)
-library(tidyr)
-library(ggplot2)
+# y = årlig realvækst i hver af de 11 forbrugsgrupper (procent)
+# x = forbrugertillid fra henholdsvis DST og DI
+# Periode: 2000K1 - 2023K2 (94 kvartaler)
 
 
-#TRIN 2: X (forbrugertillid, månedlig -> kvartaler)
-meta_DI <- dst_meta(table = "FORV1", lang = "da")
+#### TRIN 1: Forbrugertillid (x), månedlig -> kvartaler ####
+library(dkstat)  #tid til at bruge dkstat
+forv1_meta <- dst_meta(table = "FORV1", lang = "da")
 
-#kun de 4 spørgsmål der indgår i DI-FTI: F2, F4, F9, F10
-DI_FTI_query <- list(
-  INDIKATOR = c(
-    "Familiens økonomiske situation i dag, sammenlignet med for et år siden",
-    "Danmarks økonomiske situation i dag, sammenlignet med for et år siden",
-    "Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
-    "Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr."
-  ),
-  Tid = "*"
-)
+df_tillid_rå <- dst_get_data(table = "FORV1", INDIKATOR = "*", Tid = "*",
+                             meta_data = forv1_meta, lang = "da")  #alle spørgsmål, alle måneder
+df_tillid_rå <- df_tillid_rå[order(df_tillid_rå$TID), ]  #sorter efter tid
+df_tillid_rå <- df_tillid_rå[as.numeric(format(df_tillid_rå$TID, "%Y")) >= 2000, ]  #kun fra 2000
 
-DI_tillid_raw <- dst_get_data(
-  table     = "FORV1",
-  query     = DI_FTI_query,
-  meta_data = meta_DI,
-  lang      = "da"
-)
+library(tidyr)  #tid til at bruge pivot_wider
+df_tillid_bred <- pivot_wider(df_tillid_rå, names_from = INDIKATOR, values_from = value)  #ét spørgsmål pr. kolonne
+names(df_tillid_bred)  #se spørgsmålenes navne
 
-DI_tillid_raw  <- DI_tillid_raw[order(DI_tillid_raw$TID), ]
-DI_tillid_wide <- pivot_wider(DI_tillid_raw, names_from = INDIKATOR, values_from = value)
-DI_tillid_wide <- DI_tillid_wide[as.numeric(format(DI_tillid_wide$TID, "%Y")) >= 2000, ]
+di_spm <- c("F2 Familiens økonomiske situation i dag, sammenlignet med for et år siden",
+            "F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden",
+            "F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket",
+            "F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.")  #de 4 DI-spørgsmål
+dst_kol <- grep("Forbrugertillidsindikator", names(df_tillid_bred), value = TRUE)  #DST's samlede indikator
+dst_kol  #skal give præcis ét navn
 
-#månedlig ts og aggregate til kvartaler (3 måneder / 3 = gennemsnit)
-DI_tillid_ts <- ts(as.matrix(DI_tillid_wide[, -1]), start = c(2000, 1), frequency = 12)
-DI_tillid_q  <- aggregate(DI_tillid_ts, nfrequency = 4) / 3
+tillid_ts <- ts(as.matrix(df_tillid_bred[, c(di_spm, dst_kol)]),
+                start = c(2000, 1), frequency = 12)  #månedlig tidsserie
+tillid_q <- aggregate(tillid_ts, nfrequency = 4) / 3  #3 måneder lagt sammen / 3 = kvartalsgennemsnit
 
-end(DI_tillid_q)    #seneste hele kvartal med forbrugertillid
-ncol(DI_tillid_q)   #skal være 4
-
-
-#TRIN 3: byg DI-FTI (gennemsnit af de 4 spørgsmål) og saml X og Y
-DI_tillid_df <- data.frame(
-  kvartal = round(as.numeric(time(DI_tillid_q)), 2),   #2000.00, 2000.25 osv.
-  di_fti  = rowMeans(DI_tillid_q)
+df_tillid <- data.frame(
+  kvartal = round(as.numeric(time(tillid_q)), 2),  #2000.00, 2000.25 osv.
+  di_fti  = rowMeans(tillid_q[, 1:4]),  #DI-FTI = gennemsnit af de 4 spørgsmål
+  dst_fti = as.numeric(tillid_q[, 5])  #DST-FTI
 )
 
 
-# Subsette de 11 forbrugsgrupper
+#### TRIN 2: De 11 forbrugsgrupper (y), kvartalsdata ####
+nkhc_meta <- dst_meta(table = "NKHC021", lang = "da")
+nkhc_meta$variables  #tjek variabelnavnene
 
-sub_CPA <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Fødevarer",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPA <- sub_CPA[-(1:34), ]
-sub_CPA <- data.frame(sub_CPA[ , -(1:3)])
-colnames(sub_CPA) <- "FT_CPA"
+df_grupper_rå <- dst_get_data(table     = "NKHC021",
+                              FORMAAAL  = "*",
+                              PRISENHED = "2020-priser, kædede værdier",
+                              SÆSON     = "Sæsonkorrigeret",
+                              Tid       = "*",
+                              meta_data = nkhc_meta,
+                              lang      = "da")  #alle grupper i ét kald
 
-sub_CPB <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Drikkevarer og tobak mv.",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPB <- sub_CPB[-(1:34), ]
-sub_CPB <- data.frame(sub_CPB[ , -(1:3)])
-colnames(sub_CPB) <- "FT_CPB"
+df_grupper_rå <- df_grupper_rå[grepl("^CP[A-K]", df_grupper_rå$FORMAAAL), ]  #kun de 11 grupper, ikke totalen
+unique(df_grupper_rå$FORMAAAL)  #skal give 11
 
-sub_CPC <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Beklædning og fodtøj",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPC <- sub_CPC[-(1:34), ]
-sub_CPC <- data.frame(sub_CPC[ , -(1:3)])
-colnames(sub_CPC) <- "FT_CPC"
+df_grupper_rå$kvartal <- round(as.numeric(format(df_grupper_rå$TID, "%Y")) +
+                                 (as.numeric(format(df_grupper_rå$TID, "%m")) - 1) / 12, 2)  #kvartal som tal, så det matcher df_tillid
 
-sub_CPD <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Boligbenyttelse",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPD <- sub_CPD[-(1:34), ]
-sub_CPD <- data.frame(sub_CPD[ , -(1:3)])
-colnames(sub_CPD) <- "FT_CPD"
+df_grupper <- pivot_wider(df_grupper_rå[, c("kvartal", "FORMAAAL", "value")],
+                          names_from = FORMAAAL, values_from = value)  #én gruppe pr. kolonne
+df_grupper <- df_grupper[order(df_grupper$kvartal), ]  #sorter efter tid
+grupper <- names(df_grupper)[-1]  #de 11 gruppenavne
+grupper
 
-sub_CPE <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Elektricitet, gas og andet brændsel",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPE <- sub_CPE[-(1:34), ]
-sub_CPE <- data.frame(sub_CPE[ , -(1:3)])
-colnames(sub_CPE) <- "FT_CPE"
+#### TRIN 3: Årlig realvækst for hver gruppe (samme formel som opgave 2) ####
+for (gruppe in grupper) {
+  df_grupper[[gruppe]] <- c(rep(NA, 4), diff(log(df_grupper[[gruppe]]), lag = 4) * 100)  #vækst ift. samme kvartal året før
+}
 
-sub_CPF <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Boligudstyr, husholdningsudstyr og vedligholdelse heraf",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPF <- sub_CPF[-(1:34), ]
-sub_CPF <- data.frame(sub_CPF[ , -(1:3)])
-colnames(sub_CPF) <- "FT_CPF"
 
-sub_CPG <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Medicin, lægeudgifter o.l.",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPG <- sub_CPG[-(1:34), ]
-sub_CPG <- data.frame(sub_CPG[ , -(1:3)])
-colnames(sub_CPG) <- "FT_CPG"
+#### TRIN 4: Saml x og y, afgræns til 2000K1-2023K2 ####
+df_44 <- merge(df_grupper, df_tillid, by = "kvartal")  #sæt tillid på hvert kvartal
+df_44 <- df_44[df_44$kvartal >= 2000 & df_44$kvartal <= 2023.25, ]  #2023.25 = 2. kvartal 2023
+nrow(df_44)  #skal give 94
 
-sub_CPH <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Køb af køretøjer",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPH <- sub_CPH[-(1:34), ]
-sub_CPH <- data.frame(sub_CPH[ , -(1:3)])
-colnames(sub_CPH) <- "FT_CPH"
 
-sub_CPI <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Anden transport og kommunikation",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPI <- sub_CPI[-(1:34), ]
-sub_CPI <- data.frame(sub_CPI[ , -(1:3)])
-colnames(sub_CPI) <- "FT_CPI"
+#### TRIN 5: SYGLMLOOP - 11 grupper x 2 indikatorer = 22 regressioner ####
+sumr_liste <- list()
 
-sub_CPJ <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Fritidsudstyr, underholdning og rejser",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPJ <- sub_CPJ[-(1:34), ]
-sub_CPJ <- data.frame(sub_CPJ[ , -(1:3)])
-colnames(sub_CPJ) <- "FT_CPJ"
+for (gruppe in grupper) {
+  y <- df_44[[gruppe]]  #væksten i den gruppe vi er nået til
+  sumr_liste[[paste(gruppe, "- DST")]] <- summary(lm(y ~ df_44$dst_fti))  #regression med DST
+  sumr_liste[[paste(gruppe, "- DI")]]  <- summary(lm(y ~ df_44$di_fti))  #regression med DI
+}
+length(sumr_liste)  #skal give 22
 
-sub_CPK <- dst_get_data(table = "NAHC21",
-                        PRISENHED = "2020-priser, kædede værdier",
-                        Tid = "*",
-                        FORMAAAL = "Andre varer og tjenester",
-                        meta_data = NAHC21,
-                        lang = "da")
-sub_CPK <- sub_CPK[-(1:34), ]
-sub_CPK <- data.frame(sub_CPK[ , -(1:3)])
-colnames(sub_CPK) <- "FT_CPK"
 
-# Lave 22 lineære regressioner
+#### TRIN 6: Saml de 22 resultater, højeste R² øverst ####
+færdigdf <- data.frame()
 
-# Lave forbrugertillidsindikatoren (DST) til årligt og ikke kvartalvis
-ftillid_aar_ts <- aggregate(ftillid_ts, nfrequency = 1)/12 # Bruge prædefineret tidsserie
+for (navn in names(sumr_liste)) {
+  s <- sumr_liste[[navn]]  #én summary ad gangen
+  færdigdf <- rbind(færdigdf, data.frame(
+    model    = navn,
+    hældning = round(s$coefficients[2, "Estimate"], 3),
+    t_værdi  = round(s$coefficients[2, "t value"], 2),
+    p_værdi  = signif(s$coefficients[2, "Pr(>|t|)"], 3),  #signif viser små p-værdier i stedet for 0.0000
+    r2       = round(s$r.squared, 3)
+  ))  #sæt rækken på
+}
 
-# Lave til data frame på årsdata
-ftillid_aar_df <- data.frame(
-  Tidsinterval = floor(time(ftillid_aar_ts)),
-  Forbrugertillid = round(as.numeric(ftillid_aar_ts), 1))
+færdigdf <- færdigdf[order(-færdigdf$r2), ]  #højeste R² øverst
 
-ftillid_aar_df_DST <- ftillid_aar_df[-(1:4), ]
-ftillid_aar_df_DST <- ftillid_aar_df_DST[-(25:26), ]
+#### Korte forklaringer i model-kolonnen ####
+forklaring <- c(
+  CPA = "(mad og drikke uden alkohol)",
+  CPB = "(alkohol og tobak)",
+  CPC = "(tøj og sko)",
+  CPD = "(husleje og boligens brug)",
+  CPE = "(el, varme og gas)",
+  CPF = "(møbler, hvidevarer, store køb)",
+  CPG = "(medicin, læge, tandlæge)",
+  CPH = "(biler, motorcykler, cykler)",
+  CPI = "(benzin, reparation, tog og fly)",
+  CPJ = "(telefon, internet, computer, abonnementer)",
+  CPK = "(sport, hobby, oplevelser)"
+)  #én forklaring pr. gruppekode
 
-# Lave forbrugertillidsindikatoren (DI) til årligt og ikke kvartalvis
-# Lave en time series
-fTillid_ts_DI <- ts(DI_tillid_df$kvartal, start = c(2000, 1), frequency = 4)
+for (i in 1:nrow(færdigdf)) {
+  kode <- substr(færdigdf$model[i], 1, 3)  #de første 3 tegn, fx "CPF"
+  færdigdf$model[i] <- sub(" - ", paste0(" ", forklaring[kode], " - "), færdigdf$model[i])  #parentes ind før " - DI"
+}
 
-# Omregn til år
-fTillid_aar_ts_DI <- aggregate(fTillid_ts_DI, nfrequency = 1)/4
+View(færdigdf)
 
-# Lave til data frame
-ftillid_aar_df_DI <- data.frame(
-  Tidsinterval = paste0(floor(time(fTillid_aar_ts_DI)), "K", cycle(fTillid_aar_ts_DI)),
-  Forbrugertillid = round(as.numeric(fTillid_aar_ts_DI), 1))
+#### TRIN 7: Plot af gruppen med højest R² ####
+bedste_gruppe <- sub(" - (DST|DI)$", "", færdigdf$model[1])  #fjerner " - DI" fra navnet
 
-# Slette de sidste to rækker
-ftillid_aar_df_DI <- ftillid_aar_df_DI[-(25:26), ]
-ftillid_aar_df_DI <- data.frame(ftillid_aar_df_DI[ , -(1)])
-
-# cbind til samlet datasæt med forbrugsgrupper
-samlet_lm_df <- cbind(ftillid_aar_df_DST, ftillid_aar_df_DI, sub_CPA, sub_CPB, sub_CPC,
-                      sub_CPD, sub_CPE, sub_CPF, sub_CPG, sub_CPH, sub_CPI,
-                      sub_CPJ, sub_CPK)
-
-colnames(samlet_lm_df)[2:3] <- c("Forbrugertillid_DST", "Forbrugertillid_DI")
-
-# Lineære regressioner på DST og forbrugsgrupper
-# Gruppe A: (Fødevare)
-lm_CPA_DST <- lm(FT_CPA ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPA_DST)
-sumr_list_lm_CPA_DST <- list(summary(lm_CPA_DST))
-
-# Gruppe B: (Drikkevarer og tobak mv.)
-lm_CPB_DST <- lm(FT_CPB ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPB_DST)
-sumr_list_lm_CPB_DST <- list(summary(lm_CPB_DST))
-
-# Gruppe C: (Beklædning og fodtøj)
-lm_CPC_DST <- lm(FT_CPC ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPC_DST)
-sumr_list_lm_CPC_DST <- list(summary(lm_CPC_DST))
-
-# Gruppe D: (Boligudnyttelse)
-lm_CPD_DST <- lm(FT_CPD ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPD_DST)
-sumr_list_lm_CPD_DST <- list(summary(lm_CPD_DST))
-
-# Gruppe E: (Elektricitet, gas og andet brændsel)
-lm_CPE_DST <- lm(FT_CPE ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPE_DST)
-sumr_list_lm_CPE_DST <- list(summary(lm_CPE_DST))
-
-# Gruppe F: (Boligudstyr, husholdningsudstyr og vedligeholdelse heraf)
-lm_CPF_DST <- lm(FT_CPF ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPF_DST)
-sumr_list_lm_CPF_DST <- list(summary(lm_CPF_DST))
-
-# Gruppe G: (Medicin, lægeudgifter o.l.)
-lm_CPG_DST <- lm(FT_CPG ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPG_DST)
-sumr_list_lm_CPG_DST <- list(summary(lm_CPG_DST))
-
-# Gruppe H: (Køb af køretøjer)
-lm_CPH_DST <- lm(FT_CPH ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPH_DST)
-sumr_list_lm_CPH_DST <- list(summary(lm_CPH_DST))
-
-# Gruppe I: (Anden transport og kommunikation)
-lm_CPI_DST <- lm(FT_CPI ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPI_DST)
-sumr_list_lm_CPI_DST <- list(summary(lm_CPI_DST))
-
-# Gruppe J: (Fritidsudstyr, underholdning og rejser)
-lm_CPJ_DST <- lm(FT_CPJ ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPJ_DST)
-sumr_list_lm_CPJ_DST <- list(summary(lm_CPJ_DST))
-
-# Gruppe K: (Andre vare og tjenester)
-lm_CPK_DST <- lm(FT_CPK ~ Forbrugertillid_DST, data = samlet_lm_df)
-summary(lm_CPK_DST)
-sumr_list_lm_CPK_DST <- list(summary(lm_CPK_DST))
-
-# Lineære regressioner på DI og forbrugsgrupper
-# Gruppe A: (Fødevare)
-lm_CPA_DI <- lm(FT_CPA ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPA_DI)
-sumr_list_lm_CPA_DI <- list(summary(lm_CPA_DI))
-
-# Gruppe B: (Drikkevarer og tobak mv.)
-lm_CPB_DI <- lm(FT_CPB ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPB_DI)
-sumr_list_lm_CPB_DI <- list(summary(lm_CPB_DI))
-
-# Gruppe C: (Beklædning og fodtøj)
-lm_CPC_DI <- lm(FT_CPC ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPC_DI)
-sumr_list_lm_CPC_DI <- list(summary(lm_CPC_DI))
-
-# Gruppe D: (Boligudnyttelse)
-lm_CPD_DI <- lm(FT_CPD ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPD_DI)
-sumr_list_lm_CPD_DI <- list(summary(lm_CPD_DI))
-
-# Gruppe E: (Elektricitet, gas og andet brændsel)
-lm_CPE_DI <- lm(FT_CPE ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPE_DI)
-sumr_list_lm_CPE_DI <- list(summary(lm_CPE_DI))
-
-# Gruppe F: (Boligudstyr, husholdningsudstyr og vedligeholdelse heraf)
-lm_CPF_DI <- lm(FT_CPF ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPF_DI)
-sumr_list_lm_CPF_DI <- list(summary(lm_CPF_DI))
-
-# Gruppe G: (Medicin, lægeudgifter o.l.)
-lm_CPG_DI <- lm(FT_CPG ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPG_DI)
-sumr_list_lm_CPG_DI <- list(summary(lm_CPG_DI))
-
-# Gruppe H: (Køb af køretøjer)
-lm_CPH_DI <- lm(FT_CPH ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPH_DI)
-sumr_list_lm_CPH_DI <- list(summary(lm_CPH_DI))
-
-# Gruppe I: (Anden transport og kommunikation)
-lm_CPI_DI <- lm(FT_CPI ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPI_DI)
-sumr_list_lm_CPI_DI <- list(summary(lm_CPI_DI))
-
-# Gruppe J: (Fritidsudstyr, underholdning og rejser)
-lm_CPJ_DI <- lm(FT_CPJ ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPJ_DI)
-sumr_list_lm_CPJ_DI <- list(summary(lm_CPJ_DI))
-
-# Gruppe K: (Andre vare og tjenester)
-lm_CPK_DI <- lm(FT_CPK ~ Forbrugertillid_DI, data = samlet_lm_df)
-summary(lm_CPK_DI)
-sumr_list_lm_CPK_DI <- list(summary(lm_CPK_DI))
-
-# Plotte linære regressioner på 
-
-ggplot(samlet_lm_df, aes(y = FT_CPD, x = Forbrugertillid_DST)) +
+library(ggplot2)  #tid til at bruge ggplot2
+ggplot(df_44, aes(x = di_fti, y = .data[[bedste_gruppe]])) +
   geom_point(color = "pink3") +
-  geom_smooth(method = "lm", color = "hotpink3")+
-  theme_minimal() +
-  labs(x = "DST Forbrugertillidsindekator",
-       y = " Forbrugsgruppen: Boligudbyttelse",
-       title = " Linære regression for Boligydnyttelse & DST Forbrugertillidsindekator",
-       caption = "Kilde: Danmarks Statistik & Egne beregninger")
-
-ggplot(samlet_lm_df, aes(y = FT_CPD, x = Forbrugertillid_DI)) +
-  geom_point(color = "pink3") +
-  geom_smooth(method = "lm", color = "hotpink3")+
-  theme_minimal() +
-  labs(x = "DST Forbrugertillidsindekator",
-       y = " Forbrugsgruppen: Boligudbyttelse",
-       title = " Linære regression for Boligydnyttelse & DI Forbrugertillidsindekator",
-       caption = "Kilde: Danmarks Statistik & Egne beregninger")
+  geom_smooth(method = "lm", color = "hotpink3") +
+  theme_classic() +
+  labs(x = "DI forbrugertillidsindikator (nettotal)",
+       y = "Årlig realvækst, pct.",
+       title = paste("Højeste forklaringsgrad:", bedste_gruppe),
+       caption = "Tilliden forklarer især køb, man kan udskyde.\nKilde: Danmarks Statistik (NKHC021, FORV1) og egne beregninger")
 
 
 ### --- Opgave 5 --- ###

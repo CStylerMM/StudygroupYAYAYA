@@ -34,13 +34,6 @@ voresFTI_mikro<- dst_get_data(
 unique(voresFTI_mikro$INDIKATOR)
 
 
-
-
-
-
-
-
-
 ### --- BEDSTE INDIKATOR QUEST --- ###
 #Vi laver en der samler alle 11 spørgsmål
 
@@ -129,7 +122,6 @@ for (j in 1:antal_spm) {
 sapply(alle_kombi, ncol)  #11 55 165 330 462 462 330 165 55 11 1
 sum(sapply(alle_kombi, ncol))  #skal give 2047 og det gør det
 
-
 ### --- Indikator projekt - alle indikatore --- ###
 
 indikator_liste <- rep(list(rep(list())), 11)
@@ -145,6 +137,26 @@ for (z_length in 1:z_length) {
 }
 
 samlet_indikator_df_combi <- data.frame(indikator_liste)
+
+# Opdateret loop med navngivet kolonner,
+indikator_liste <- rep(list(rep(list())), 11)
+z_length <- length(df_kvartal[ , 2:ncol(df_kvartal)])
+col_names <- c("F2", "F3", "F4", "F5", "F9", "F6", "F7", "F8", "F10", "F12", "F13" )
+
+for (z_length in 1:z_length) {
+  l <- length(colMeans(matrix(as.numeric(combn(df_kvartal[i,2:ncol(df_kvartal)], z_length)), nrow = z_length)))
+  df_combi_d <- matrix(0, nrow = nrow(df_kvartal), ncol = l)
+  names <- combn(col_names, z_length)
+  names <- combn(col_names, z_length, paste, collapse = ",")
+  colnames(df_combi_d) <- names
+  for (i in 1:nrow(df_kvartal)) {
+    df_combi_d[i, ] <- colMeans(matrix(as.numeric(combn(df_kvartal[i,2:ncol(df_kvartal)], z_length)), nrow = z_length))
+    indikator_liste[[z_length]] <- df_combi_d
+  }
+}
+
+samlet_indikator_df_combi <- data.frame(indikator_liste)
+
 
 
 ### --- Lave LM på dem, OLA3? --- ###
@@ -187,64 +199,172 @@ samlet_indikator_forbrug <- cbind(df_vaekst_kvartal, df_kvartal_clean)
 
 
 # Loope lm :))
+#Lav LM loop opg 1.
 
 lm_indikator_liste <- rep(list(rep(list())), 2047)
 
 for (i in 3:ncol(samlet_indikator_forbrug)) {
-  lm_indikator <- lm(realvaekst ~ i, data = samlet_indikator_forbrug)
-  sum_lm_indikator <- summary(lm_indikator)
-  lm_indikator_liste[[i]] <- sum_lm_indikator
+  lm_indikator <- lm(samlet_indikator_forbrug$realvaekst ~ samlet_indikator_forbrug[[i]])
+  lm_indikator_liste[[i-2]] <- summary(lm_indikator)
 }
 
+#vi finder R2 "adj.r.squared"
+names(lm_indikator_liste[[1]])
+adj_r2 <- sapply(lm_indikator_liste, function(x) x$adj.r.squared)
+rss <- sapply(lm_indikator_liste, function(x) sum(x$residuals^2))
 
-t_lm_indikator_liste <- rep(list(rep(list())), 2047)
+# Dataframe med kombinationer, r^2 og RSS
+df_r2 <- data.frame(
+  kombination = names(samlet_indikator_forbrug)[3:ncol(samlet_indikator_forbrug)],
+  adj_r2 = adj_r2,
+  RSS = rss
+)
 
-i = samlet_indikator_forbrug[ ,3]
+# Top 10 😎
+nrow(df_r2)
+head(df_r2)
 
-t_lm_indikator <- lm(realvaekst ~ i, data = samlet_indikator_forbrug)
-t_sum_lm_indikator <- summary(t_lm_indikator)
-
-
-
-
-
-
-t_lm_indikator_liste[[i]] <- t_sum_lm_indikator
-
-
-
-test <- lm(realvaekst ~ X1, data = samlet_indikator_forbrug)
-sum_test <- summary(test)
-R2_liste[[z_length]] <- sum_test
+top10 <- head(df_r2[order(df_r2$adj_r2, decreasing = TRUE), ], 10)
+top10
 
 
+### --- Tjekke for stabilitet --- ###
+# Overvejelser 
+# Vende fortegn om, i udvalgte spørgsmål f6, f7, f8, for at få en fælles retning
+# for hvad der er godt og hvad der er skidt
+
+df_kvartal$`F6 Priser i dag, sammenlignet med for et år siden` <- df_kvartal$`F6 Priser i dag, sammenlignet med for et år siden` * -1
+df_kvartal$`F8 Arbejdsløsheden om et år, sammenlignet med i dag` <- df_kvartal$`F8 Arbejdsløsheden om et år, sammenlignet med i dag` * -1
+
+# Tjekke antagelse af korrelation er rigtigt
+val_cor_tillid <- df_kvartal[-107, ]
+
+cor(val_cor_tillid$`F2 Familiens økonomiske situation i dag, sammenlignet med for et år siden`, samlet_indikator_forbrug$realvaekst)
+# 0.4822062
+cor(val_cor_tillid$`F3 Familiens økonomiske  situation om et år, sammenlignet med i dag`, samlet_indikator_forbrug$realvaekst)
+# 0.2966892
+cor(val_cor_tillid$`F4 Danmarks økonomiske situation i dag, sammenlignet med for et år siden`, samlet_indikator_forbrug$realvaekst)
+# 0.5792219
+cor(val_cor_tillid$`F5 Danmarks økonomiske situation om et år, sammenlignet med i dag`, samlet_indikator_forbrug$realvaekst)
+# 0.1426621
+cor(val_cor_tillid$`F6 Priser i dag, sammenlignet med for et år siden`, samlet_indikator_forbrug$realvaekst)
+# 0.2989761
+cor(val_cor_tillid$`F7 Priser om et år, sammenlignet med i dag`, samlet_indikator_forbrug$realvaekst)
+# 0.3489288 (original, vi overvejede at vende den om) 
+cor(val_cor_tillid$`F8 Arbejdsløsheden om et år, sammenlignet med i dag`, samlet_indikator_forbrug$realvaekst)
+# 0.5027595
+cor(val_cor_tillid$`F9 Anskaffelse af større forbrugsgoder, fordelagtigt for øjeblikket`, samlet_indikator_forbrug$realvaekst)
+# 0.4813302
+cor(val_cor_tillid$`F10 Anskaffelse af større forbrugsgoder, inden for de næste 12 mdr.`, samlet_indikator_forbrug$realvaekst)
+# 0.6615258
+cor(val_cor_tillid$`F12 Regner med at kunne spare op i de kommende 12 måneder`, samlet_indikator_forbrug$realvaekst)
+# 0.4664607
+cor(val_cor_tillid$`F13 Familiens økonomiske situation lige nu: kan spare/penge slår til/ bruger mere end man tjener`, samlet_indikator_forbrug$realvaekst)
+# 0.4828819
+
+
+# TSS
+tss <- var(samlet_indikator_forbrug$realvaekst) * 
+  (length(samlet_indikator_forbrug$realvaekst) - 1)
+df_r2$TSS <- tss
+
+
+# Stabiliserer :))
+# Vi blev enige om at fjerne 24 kvartaller fra sættet, så i alt 6 år
+
+# Loop 1, fjerne kvartaller (24) fra 2000
+# Datasættet bliver gradvist mindre, og ender på 82 observationer
+sub_loop1_lm_liste <- rep(list(rep(list())), 2047)
+loop1_lm_liste_samlet <- rep(list(rep(list(rep(list())))), 24)
+
+for (i in 1:24) {
+  sub_loop1_samlet_df <- samlet_indikator_forbrug
+  sub_loop1_samlet_df <- sub_loop1_samlet_df[-(1:i), ]
+  for (j in 3:ncol(sub_loop1_samlet_df)) {
+    loop1_lm_indikator <- lm(sub_loop1_samlet_df$realvaekst ~ sub_loop1_samlet_df[[j]])
+    sub_loop1_lm_liste[[j-2]] <- summary(loop1_lm_indikator)
+  }
+  loop1_lm_liste_samlet[[i[]]] <- sub_loop1_lm_liste
+}
+
+View(loop1_lm_liste_samlet)
+
+# Vi mangler at slå gennemsnit, put a pin in it
+
+
+# Loop 2, fjerne kvartaller (24) fra 2026
+# Datasættet bliver gradvist mindre, og ender på 82 observationer
+sub_loop2_lm_liste <- rep(list(rep(list())), 2047)
+loop2_lm_liste_samlet <- rep(list(rep(list(rep(list())))), 24)
+
+for (h in 1:1) {
+  sub_loop2_samlet_df <- samlet_indikator_forbrug
+  for (i in 1:24) {
+    sub_loop2_samlet_df <- sub_loop2_samlet_df[-nrow(sub_loop2_samlet_df), ]
+    for (j in 3:ncol(sub_loop2_samlet_df)) {
+      loop2_lm_indikator <- lm(sub_loop2_samlet_df$realvaekst ~ sub_loop2_samlet_df[[j]])
+      sub_loop2_lm_liste[[j-2]] <- summary(loop2_lm_indikator)
+    }
+    loop2_lm_liste_samlet[[i[]]] <- sub_loop2_lm_liste
+  } 
+}
+
+View(loop2_lm_liste_samlet)
+
+# Loop 3, fjerne kvartaller (24) i rul
+# Datasættet bliver har altid 82 observationer, men i et rullende interval
+sub_loop3_lm_liste <- rep(list(rep(list())), 2047)
+loop3_lm_liste_samlet <- rep(list(rep(list(rep(list())))), 24)
+
+for (i in 1:24) {
+  sub_loop3_samlet_df <- samlet_indikator_forbrug
+  loop3_start <- 0
+  loop_int_længde <- nrow(sub_loop3_samlet_df)-25
+  sub_loop3_samlet_df <- sub_loop3_samlet_df[(loop3_start + i):(loop_int_længde + i), ]
+  for (j in 3:ncol(sub_loop3_samlet_df)) {
+    loop3_lm_indikator <- lm(sub_loop3_samlet_df$realvaekst ~ sub_loop3_samlet_df[[j]])
+    sub_loop3_lm_liste[[j-2]] <- summary(loop3_lm_indikator)
+  }
+  loop3_lm_liste_samlet[[i[]]] <- sub_loop3_lm_liste
+}
+
+View(loop3_lm_liste_samlet)
+
+# Loop 4, fjerne kvartaller (24) fra begge ender af datasæt
+# OBS: Har lavet 12 intervaller i stedet for 24, fordi jeg fjerner 2 ad gangen
+# Så man ender med stadig at have fjernet 24 kvartaller i alt
+# Datasættet bliver gradvist mindre, og ender på 82 observationer
+sub_loop4_lm_liste <- rep(list(rep(list())), 2047)
+loop4_lm_liste_samlet <- rep(list(rep(list(rep(list())))), 12)
+
+for (h in 1:1) {
+  sub_loop4_samlet_df <- samlet_indikator_forbrug
+  for (i in 1:12) {
+    sub_loop4_samlet_df <- sub_loop4_samlet_df[-1, ]
+    sub_loop4_samlet_df <- sub_loop4_samlet_df[-nrow(sub_loop4_samlet_df), ]
+    for (j in 3:ncol(sub_loop4_samlet_df)) {
+      loop4_lm_indikator <- lm(sub_loop4_samlet_df$realvaekst ~ sub_loop4_samlet_df[[j]])
+      sub_loop4_lm_liste[[j-2]] <- summary(loop4_lm_indikator)
+    }
+    loop4_lm_liste_samlet[[i[]]] <- sub_loop4_lm_liste
+  } 
+}
+
+View(loop4_lm_liste_samlet)
 
 
 
 
 
 
+# Trække gennemsnit ud i dem alle sammen
+# Loop 1
 
 
-#Lav LM loop opg 1.
+# Loop 2
 
 
+# Loop 3
 
 
-### --- TEEEEEST --- ###
-
-# Hvordan man navngiver kolonner i loop - opgave 2.
-
-#Sim det der med navne
-
-col_names <- c("F2", "F3", "F4", "F5", "F9", "F6", "F7", "F8", "F10", "F12", "F13" )
-
-t_l <- length(colMeans(matrix(as.numeric(combn(df_kvartal[1,2:ncol(df_kvartal)], 1)), nrow = 1)))
-t_df_combi_d <- matrix(0, nrow = nrow(df_kvartal), ncol = t_l)
-t_names <- combn(col_names, 1)
-t_names <- combn(col_names, 1, paste, collapse = ",")
-colnames(t_df_combi_d) <- t_names
-
-t_df_combi_d[i, ] <- colMeans(matrix(as.numeric(combn(df_kvartal[i,2:ncol(df_kvartal)], z_length)), nrow = z_length))
-indikator_liste[[z_length]] <- df_combi_d
-
+# Loop 4

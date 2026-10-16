@@ -355,16 +355,90 @@ View(loop4_lm_liste_samlet)
 
 
 
+#Casper laver PCA, PLS og RR
+library(pls)
+
+#PCA nu (tid er fra 2000 til 2026K2)
+df_pca_11x <- df_kvartal[-107, 2:ncol(df_kvartal)]  #rækkerne skal være ens i X og Y, så vi bruger 106 i stedet for 107
+names(df_pca_11x) <- trimws(substr(names(df_pca_11x), 1, 3))  #de første 3 tegn er F-nummeret, trimws fjerner mellemrummet efter F2, F3 osv.
+head(df_pca_11x)
+
+#        F2       F3         F4         F5         F9        F6         F7         F8       F10      F12      F13
+#1 2.333333 13.00000 -3.3333333 -8.0000000 -6.3333333 14.000000  -7.333333  5.3333333 -7.333333 27.33333 24.00000
+#2 7.333333 15.00000  2.0000000 -0.6666667 -2.0000000 10.000000  -9.000000  9.0000000 -6.333333 29.33333 26.33333
+#3 6.333333 15.00000  1.6666667 -1.0000000 -8.0000000  9.666667  -9.666667  7.3333333 -8.333333 24.66667 25.33333
+#4 4.666667 13.00000 -0.6666667 -6.0000000 -0.3333333  8.666667  -4.000000  0.3333333 -8.666667 22.33333 23.33333
+#5 4.333333 14.33333  0.0000000 -5.0000000 -6.0000000 13.333333 -11.000000  0.3333333 -7.333333 27.66667 24.66667
+#6 5.666667 12.66667 -5.6666667 -7.0000000 -6.0000000  9.666667  -8.333333 -2.6666667 -6.333333 27.33333 25.33333
+dim(df_pca_11x)
+#[1] 106  11
+
+#?prcomp
+pca_model <- prcomp(df_pca_11x, scale. = TRUE)  #scale. = TRUE så alle spørgsmål tæller lige meget
+summary(pca_model)
+#Importance of components:
+#                         PC1    PC2    PC3    PC4     PC5     PC6     PC7     PC8     PC9    PC10    PC11
+#Standard deviation     2.4834 1.3491 1.1047 0.7707 0.68761 0.48383 0.44673 0.35986 0.27606 0.24866 0.15600
+#Proportion of Variance 0.5607 0.1655 0.1109 0.0540 0.04298 0.02128 0.01814 0.01177 0.00693 0.00562 0.00221
+#Cumulative Proportion  0.5607 0.7261 0.8371 0.8911 0.93404 0.95532 0.97347 0.98524 0.99217 0.99779 1.00000
+
+pca_model$rotation[, 1:11]  #vi tager 1 til 11
+
+#round(pca_model$rotation[, 1:11], 2)  #wow se
+#.    PC1   PC2   PC3   PC4   PC5   PC6   PC7   PC8   PC9   PC10  PC11
+#F2  -0.37 -0.06  0.12 -0.29  0.22 -0.22  0.21  0.25  0.17 -0.20  0.70
+#F3  -0.34 -0.30  0.05 -0.06  0.10 -0.46  0.30  0.27 -0.37  0.00 -0.51
+#F4  -0.33  0.09 -0.39 -0.04  0.46  0.06 -0.02 -0.43  0.27 -0.43 -0.27
+#F5  -0.25 -0.31 -0.32  0.51 -0.55 -0.27 -0.02 -0.18  0.11 -0.14  0.21
+#F9  -0.33 -0.06 -0.04 -0.46 -0.48  0.47 -0.21  0.13 -0.21 -0.32 -0.10
+#F6  -0.34 -0.27  0.18 -0.17 -0.06  0.26  0.30 -0.42  0.23  0.60 -0.03
+#F7   0.02  0.63 -0.26 -0.35 -0.33 -0.36  0.29 -0.23 -0.10  0.13  0.01
+#F8  -0.27  0.23 -0.52  0.30  0.16  0.38  0.18  0.41 -0.19  0.32  0.10
+#F10 -0.36  0.13  0.02 -0.05  0.12 -0.28 -0.78 -0.04 -0.10  0.37  0.04
+#F12 -0.26  0.31  0.48  0.38  0.06  0.14  0.12 -0.34 -0.51 -0.20  0.14
+#F13 -0.28  0.39  0.36  0.23 -0.19 -0.01  0.03  0.34  0.58 -0.05 -0.30
 
 
-# Trække gennemsnit ud i dem alle sammen
-# Loop 1
+?loadings
+pca_model_mloadings <- pca_model$loadings  #vi tager 1 til 11
+
+library(pls)  #tid til at bruge pls
+
+#Det før var PCA. her er Baums PCR
+df_pcr <- data.frame(df_vaekst_kvartal$realvaekst, df_pca_11x)  #Y og de 11 spørgsmål i samme dataframe
+
+pcr_model <- pcr(df_vaekst_kvartal$realvaekst ~ ., data = df_pca_11x, scale = TRUE, validation = "CV")  #Y hentes fra den anden dataframe
+summary(pcr_model)
+
+#Data: 	X dimension: 106 11 
+#Y dimension: 106 1
+#Fit method: svdpc
+#Number of components considered: 11
+
+#VALIDATION: RMSEP
+#Cross-validated (CV) using 10 random segments.
+#          (Intercept)  1 comps  2 comps  3 comps  4 comps  5 comps  6 comps  7 comps  8 comps  9 comps  10 comps  11 comps
+#CV           2.767    2.335    2.064    2.063    2.044    2.047    2.059    2.025    2.024    2.006     2.018     2.028
+#adjCV        2.767    2.331    2.059    2.058    2.038    2.041    2.062    2.015    2.014    1.993     2.005     2.014
+
+#TRAINING: % variance explained
+#                                    1 comps  2 comps  3 comps  4 comps  5 comps  6 comps  7 comps  8 comps  9 comps  10 comps  11 comps
+#X                                  56.07    72.61    83.71    89.11     93.4    95.53    97.35    98.52    99.22     99.78     100.0
+#df_vaekst_kvartal$realvaekst (y)   31.36    47.27    48.23    49.96     50.5    50.50    54.97    56.00    58.39     58.53      58.6
+
+vægt_første_komponent <- pcr_model$loadings[, 1]^2  #kolonne 1 (PC1) kvadreret = vægt pr. spørgsmål
+sum(vægt_første_komponent)  #skal give 1 and it doooo
+
+sort(vægt_første_komponent, decreasing = TRUE)  #de tre øverste er svaret på 2.2
+#.    F2          F10           F3           F6           F9           F4          F13           F8          F12           F5           F7 
+#0.1388591918 0.1313238597 0.1182017294 0.1180716174 0.1104692826 0.1057644269 0.0758846190 0.0713365668 0.0678825997 0.0619002141 0.0003058925 
+
+#så det tid til opgave 2.2
+#Hvilke 3 spørgsmål i forbrugerforventningsundersøgelsen har de højeste vægte? 
+#Diskutér om spørgsmålene giver analytisk mening.
 
 
-# Loop 2
 
 
-# Loop 3
 
 
-# Loop 4

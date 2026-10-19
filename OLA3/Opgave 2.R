@@ -12,8 +12,8 @@ forv_alle <- dst_get_data(table = "FORV1",
 #uden F1 (totalen) og F11, og kun fra 2000
 df_11spg <- forv_alle[!grepl("^F11|^F1 ", forv_alle$INDIKATOR), ]
 df_11spg <- df_11spg[df_11spg$TID >= as.Date("2000-01-01"), ]
-sum(is.na(df_11spg$value))   #skal være 0
-
+sum(is.na(df_11spg$value))   #har vi nogle na'er - nope
+unique(df_11spg$INDIKATOR)
 #månederne laves til kvartaler: 3 måneder pr. kolonne, så gennemsnit
 måneder <- sort(unique(df_11spg$TID))
 length(måneder) %% 3   #skal være 0, ellers er sidste kvartal ikke fuldt
@@ -46,10 +46,13 @@ ts_realvaekst <- window(ts(vaekst, start = c(1991, 1), frequency = 4), start = c
 df_vaekst_kvartal <- data.frame(kvartal = round(as.numeric(time(ts_realvaekst)), 2),
                                 realvaekst = as.numeric(ts_realvaekst))
 
-#F6 og F8 vendes, så højere tal er bedre stemning for alle
-df_kvartal[[grep("^F6 ", names(df_kvartal))]] <- df_kvartal[[grep("^F6 ", names(df_kvartal))]] * -1
-df_kvartal[[grep("^F8 ", names(df_kvartal))]] <- df_kvartal[[grep("^F8 ", names(df_kvartal))]] * -1
+#F6 F7 og F8 vendes, så højere tal er bedre stemning for alle
 
+##Vi har egentlig også gjort dette i opgave 1
+##Men nu tilføjer vi også F7
+#df_kvartal$`F6 Priser i dag, sammenlignet med for et år siden` <- df_kvartal$`F6 Priser i dag, sammenlignet med for et år siden` * -1
+df_kvartal$`F8 Arbejdsløsheden om et år, sammenlignet med i dag` <- df_kvartal$`F8 Arbejdsløsheden om et år, sammenlignet med i dag` * -1
+df_kvartal$`F7 Priser om et år, sammenlignet med i dag` <- df_kvartal$`F7 Priser om et år, sammenlignet med i dag` * -1
 #X og Y skal have lige mange rækker: X har et kvartal mere end Y, det sidste tages fra
 df_pca_11x <- df_kvartal[1:nrow(df_vaekst_kvartal), 2:ncol(df_kvartal)]
 names(df_pca_11x) <- trimws(substr(names(df_pca_11x), 1, 3))   #F2, F3 osv.
@@ -118,7 +121,7 @@ vægt_data <- data.frame(spørgsmål = names(vægt_PC1), vægt = vægt_PC1)
 
 ggplot(vægt_data, aes(x = reorder(spørgsmål, vægt), y = vægt)) +
   geom_col(fill = "hotpink") +
-  geom_text(aes(label = round(vægt, 3)), hjust = -0.1, size = 3.5) +
+  geom_text(aes(label = round(vægt, 3)), hjust = 1.2, size = 4.5, color = "white") +
   coord_flip() +
   scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
   labs(title   = "Hvilke spørgsmål vejer mest i første komponent?",

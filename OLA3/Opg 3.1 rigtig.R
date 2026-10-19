@@ -29,7 +29,7 @@ for (f in unique(forbrug_faste$FORMAAAL)) {
 }
 
 #kun fra 2000 og frem, så det passer med de andre data
-df_forbrug_bred <- df_forbrug_bred[df_forbrug_bred$TID >= as.Date("2000-01-01"), ]
+df_forbrug_bred <- df_forbrug_bred[df_forbrug_bred$TID >= as.Date("1999-01-01"), ]
 
 #kun K4 (oktober)
 df_K4 <- df_forbrug_bred[format(df_forbrug_bred$TID, "%m") == "10", ]

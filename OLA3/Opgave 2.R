@@ -1,4 +1,4 @@
-#Opgave 2: PCA, PCR, PLS og RR
+#Opgave 2: PCA, PCR, PLS og ikke RR
 #vi starter med X og Y fra opgave 1
 
 library(dkstat)
@@ -12,8 +12,12 @@ forv_alle <- dst_get_data(table = "FORV1",
 #uden F1 (totalen) og F11, og kun fra 2000
 df_11spg <- forv_alle[!grepl("^F11|^F1 ", forv_alle$INDIKATOR), ]
 df_11spg <- df_11spg[df_11spg$TID >= as.Date("2000-01-01"), ]
+df_11spg <- df_11spg[df_11spg$TID < as.Date("2026-10-01"), ]
 sum(is.na(df_11spg$value))   #har vi nogle na'er - nope
 unique(df_11spg$INDIKATOR)
+f11 <- forv_alle[grepl("^F11", forv_alle$INDIKATOR) & !is.na(forv_alle$value), ]
+max(f11$TID)         #sidste måling af F11, skal vise 2025-04-01
+max(forv_alle$TID)   #sidste måned i tabellen i øvrigt
 #månederne laves til kvartaler: 3 måneder pr. kolonne, så gennemsnit
 måneder <- sort(unique(df_11spg$TID))
 length(måneder) %% 3   #skal være 0, ellers er sidste kvartal ikke fuldt
@@ -42,21 +46,20 @@ df_forbrug <- df_forbrug[order(df_forbrug$TID), ]
 ts_forbrug <- ts(df_forbrug$value, start = c(1990, 1), frequency = 4)
 vaekst <- (exp(diff(log(as.numeric(ts_forbrug)), lag = 4)) - 1) * 100
 ts_realvaekst <- window(ts(vaekst, start = c(1991, 1), frequency = 4), start = c(2000, 1))
-
 df_vaekst_kvartal <- data.frame(kvartal = round(as.numeric(time(ts_realvaekst)), 2),
                                 realvaekst = as.numeric(ts_realvaekst))
 
-#F6 F7 og F8 vendes, så højere tal er bedre stemning for alle
-
-##Vi har egentlig også gjort dette i opgave 1
-##Men nu tilføjer vi også F7
-#df_kvartal$`F6 Priser i dag, sammenlignet med for et år siden` <- df_kvartal$`F6 Priser i dag, sammenlignet med for et år siden` * -1
+#F6 og F8 vendes, så højere tal er bedre stemning. Samme som i opgave 1
+df_kvartal$`F6 Priser i dag, sammenlignet med for et år siden` <- df_kvartal$`F6 Priser i dag, sammenlignet med for et år siden` * -1
 df_kvartal$`F8 Arbejdsløsheden om et år, sammenlignet med i dag` <- df_kvartal$`F8 Arbejdsløsheden om et år, sammenlignet med i dag` * -1
-df_kvartal$`F7 Priser om et år, sammenlignet med i dag` <- df_kvartal$`F7 Priser om et år, sammenlignet med i dag` * -1
-#X og Y skal have lige mange rækker: X har et kvartal mere end Y, det sidste tages fra
-df_pca_11x <- df_kvartal[1:nrow(df_vaekst_kvartal), 2:ncol(df_kvartal)]
-names(df_pca_11x) <- trimws(substr(names(df_pca_11x), 1, 3))   #F2, F3 osv.
+
+#X har et kvartal mere end Y (2026K3). Det kvartal gemmes til prognosen
+df_x_alle <- df_kvartal[, 2:ncol(df_kvartal)]
+names(df_x_alle) <- trimws(substr(names(df_x_alle), 1, 3))   #F2, F3 osv.
+df_pca_11x <- df_x_alle[1:nrow(df_vaekst_kvartal), ]
+x_2026K3 <- df_x_alle[107, ]
 dim(df_pca_11x)   #skal give 106 x 11
+
 
 
 #okay okay lad os kigge på det
@@ -71,7 +74,13 @@ summary(lm(realvaekst ~ ., data = df_pcr))
 round(cor(df_pca_11x), 2)
 #AHA: mange tal tæt på 1, så spørgsmålene siger næsten det samme = multikollinearitet
 
-
+kor <- cor(df_pca_11x)
+kor[upper.tri(kor, diag = TRUE)] <- NA
+par_idx <- which(!is.na(kor), arr.ind = TRUE)
+kor_par <- data.frame(spm1 = rownames(kor)[par_idx[, 1]],
+                      spm2 = colnames(kor)[par_idx[, 2]],
+                      r    = round(kor[par_idx], 2))
+head(kor_par[order(-abs(kor_par$r)), ], 10)   #de 10 stærkeste par = bilaget
 #trin 2: PCA, kun på X
 pca_model <- prcomp(df_pca_11x, scale. = TRUE)   #scale. = TRUE, ellers vinder det største tal
 
@@ -143,14 +152,18 @@ ggplot(vægt_data, aes(x = reorder(spørgsmål, vægt), y = vægt)) +
 #fælles stemning, ikke hvilke der bedst forudsiger forbruget.
 #F3 og F6 er reelt lige tunge (0,1182 mod 0,1181), så nummer 3 er et hårsbred.
 #F7 (priser om et år) vejer næsten ingenting (0,0003).
-
-#opg 2.3 trin 1: modellens bud på 3. kvartal 2025
-df_kvartal[103, 1]   #tjek: skal vise 3. kvartal 2025
-
+df_kvartal[103, 1]   #tjek: skal vise 2025K3
 x_2025K3 <- df_pca_11x[103, ]   #de 11 svar for det kvartal
-
 predict(pcr_model, newdata = x_2025K3, ncomp = 2)   #modellens bud (årlig realvækst, %)
 df_pcr$realvaekst[103]   #hvad det faktisk blev
+#opg 2.3 trin 1: modellens bud på 3. kvartal 2025
+#2025K3 uden at modellen har set kvartalet: træn kun til og med 2025K2 (række 102)
+pcr_til_2025K2 <- pcr(realvaekst ~ ., data = df_pcr[1:102, ], scale = TRUE)
+predict(pcr_til_2025K2, newdata = x_2025K3, ncomp = 2)
+
+#2026K3: første kvartal med tillid men uden forbrug, ligesom i opgave 1.4
+df_kvartal[107, 1]   #tjek: skal vise 2026K3
+predict(pcr_model, newdata = x_2026K3, ncomp = 2)
 
 #2.3 trin 2: er 0,07 mærkeligt?
 mean(df_pcr$realvaekst)    #hvad er normal vækst i vores data?

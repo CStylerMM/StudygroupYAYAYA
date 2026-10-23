@@ -90,7 +90,7 @@ df_model <- merge(df_K4[, c("År", "julehandel", "vækst", "retning")],
                   by = "År")
 names(df_model)[names(df_model) == "value"] <- "tillid"
 
-df_model <- df_model[df_model$År >= 2001, ]   #2000 har ingen vækst, så den falder væk
+df_model <- df_model[df_model$År >= 2000, ]   
 df_model
 
 #logistisk regression: retning (OP/NED) forklaret af forbrugertilliden i K3

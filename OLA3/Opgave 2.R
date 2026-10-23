@@ -121,24 +121,28 @@ sort(vægt_PC1, decreasing = TRUE)
 
 library(ggplot2)
 
-vægt_PC1 <- pcr_model$loadings[, 1]^2   #vægtene fra PC1, kvadreret så summen er 1
-top3 <- sort(vægt_PC1, decreasing = TRUE)[1:3]
-round(top3, 3)   #F2 0,139, F10 0,131, F3 0,118
+## Standardiserede regressionsvægte fra PCR med 2 komponenter
+df_vaegte <- data.frame(
+  spoergsmaal = names(coef(pcr_model, ncomp = 2)[, 1, 1]),
+  vaegt = as.numeric(coef(pcr_model, ncomp = 2)[, 1, 1])
+)
 
-#plot af alle vægtene, så man kan se, hvor store forskellene er
-vægt_data <- data.frame(spørgsmål = names(vægt_PC1), vægt = vægt_PC1)
+## Sorter efter størrelse, så den største står øverst
+df_vaegte <- df_vaegte[order(df_vaegte$vaegt), ]
+df_vaegte$spoergsmaal <- factor(df_vaegte$spoergsmaal, levels = df_vaegte$spoergsmaal)
 
-ggplot(vægt_data, aes(x = reorder(spørgsmål, vægt), y = vægt)) +
-  geom_col(fill = "hotpink") +
-  geom_text(aes(label = round(vægt, 3)), hjust = 1.2, size = 4.5, color = "white") +
-  coord_flip() +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
-  labs(title   = "Hvilke spørgsmål vejer mest i første komponent?",
-       x       = NULL,
-       y       = "Vægt (kvadreret loading, sum = 1)",
+library(ggplot2)
+
+ggplot(df_vaegte, aes(x = vaegt, y = spoergsmaal)) +
+  geom_col(fill = "#FF4FA3") +
+  geom_text(aes(label = round(vaegt, 2),
+                hjust = ifelse(vaegt > 0, 1.2, 1.2),
+                colour = vaegt > 0)) +
+  scale_colour_manual(values = c("TRUE" = "white", "FALSE" = "black"), guide = "none") +  labs(title = "Hvilke spørgsmål vejer mest i regressionen?",
+       x = "Vægt (standardiseret regressionskoefficient)", y = NULL,
        caption = "Kilde: Danmarks Statistik, FORV1") +
   theme_minimal()
-
+ggsave("regressionsvaegte.png", width = 6.3, height = 4, dpi = 300)
 #SVAR:
 #De tre højeste vægte er F2 (familiens økonomi i dag), F10 (hvor meget familien vil
 #bruge på større forbrugsgoder de næste 12 mdr.) og F3 (familiens økonomi om et år).

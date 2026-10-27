@@ -169,6 +169,58 @@ predict(pcr_til_2025K2, newdata = x_2025K3, ncomp = 2)
 df_kvartal[107, 1]   #tjek: skal vise 2026K3
 predict(pcr_model, newdata = x_2026K3, ncomp = 2)
 
+#Opgave 2: heatmap der viser multikollinearitet mellem de 12 spørgsmål i FORV1
+
+library(dkstat)   #tid til at bruge dkstat
+
+forv_meta <- dst_meta(table = "FORV1", lang = "da")   #henter metadata én gang
+
+df_forv_raw <- dst_get_data(
+  table = "FORV1",
+  query = list(INDIKATOR = "*", Tid = "*"),   #alle spørgsmål og alle måneder
+  meta_data = forv_meta,
+  lang = "da"
+)
+
+unique(df_forv_raw$INDIKATOR)   #tjek: navnene skal starte med F1, F2 ... F13
+
+library(tidyverse)   #tid til at bruge tidyverse
+
+df_forv_kvartal <- df_forv_raw %>%
+  mutate(
+    spørgsmål = sub(" .*", "", INDIKATOR),   #"F12 Regner med at kunne spare op..." bliver til "F12"
+    år        = as.numeric(format(TID, "%Y")),
+    kvartal   = (as.numeric(format(TID, "%m")) - 1) %/% 3 + 1   #måned 1-3 = K1, 4-6 = K2 osv.
+  ) %>%
+  filter(spørgsmål != "F1") %>%   #F1 er DST's samlede indikator, ikke et spørgsmål
+  filter(år >= 2000, år <= 2025) %>%
+  filter(!(år == 2025 & kvartal == 4)) %>%   #samme periode som PCR: 2000K1 til 2025K3
+  group_by(spørgsmål, år, kvartal) %>%
+  summarise(svar = mean(value), .groups = "drop") %>%   #gennemsnit af de tre måneder i kvartalet
+  pivot_wider(names_from = spørgsmål, values_from = svar) %>%   #én kolonne pr. spørgsmål
+  select(år, kvartal, paste0("F", 2:13))   #F2 til F13 i rigtig rækkefølge, ellers kommer F10 før F2
+
+df_forv_kvartal   #tjek: én række pr. kvartal og 12 spørgsmålskolonner
+
+kor_matrix <- cor(df_forv_kvartal[, paste0("F", 2:13)], use = "complete.obs")   #korrelation mellem alle par af spørgsmål
+round(kor_matrix, 2)   #tjek: F12 og F13 skal give ca. 0,88
+
+df_kor <- as.data.frame(as.table(kor_matrix))   #fra matrix til lang tabel: Var1, Var2, Freq
+
+ggplot(df_kor, aes(x = Var1, y = Var2, fill = Freq)) +
+  geom_tile(color = "white") +   #ét felt pr. par af spørgsmål
+  geom_text(aes(label = round(Freq, 2)), size = 2.5) +   #tallet i hvert felt
+  scale_fill_gradient2(low = "#E06666", mid = "white", high = "#6AA84F", limits = c(-1, 1)) +   #rød = modsat, grøn = følges ad
+  labs(
+    title = "Spørgsmålene i forbrugerundersøgelsen ligner hinanden",
+    x = NULL, y = NULL, fill = "Korrelation",
+    caption = "Mange felter tæt på 1 betyder multikollinearitet. Derfor bruger vi PCR.\nKilde: Danmarks Statistik, FORV1, 2000K1-2025K3"
+  ) +
+  theme_minimal()
+
+
+
+
 #2.3 trin 2: er 0,07 mærkeligt?
 mean(df_pcr$realvaekst)    #hvad er normal vækst i vores data?
 range(df_pcr$realvaekst)   #laveste og højeste vækst

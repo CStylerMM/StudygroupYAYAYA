@@ -1,6 +1,6 @@
 #Opgave 3
 library(dkstat)
-#vi starter opg 3.1 med at hive forbrugsgoder ind via eurostat api
+#vi starter opg 3.1 med at hive forbrugsgoder ind via dkstat api
 forbrugsgoder_meta <- dst_meta(table = "NKHC021", lang = "da")
 
 #de 8 spørgsmål der indgår i vores mikro er  (F2,F3,F9,F10,F11,F12,F13,)

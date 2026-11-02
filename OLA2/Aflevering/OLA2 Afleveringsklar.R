@@ -15,10 +15,11 @@
 #### Opgave 1.1 – Det første skridt ####
 #for at finde en tabel med indbyggertal i byer søger vi i DST's tabeller
 #nu tilføjer vi dkstat
+
 library(dkstat)
 
-df_soeg <- dst_search(string = "Befolkning", field = "text")
-df_soeg[df_soeg$id == "BY3", ]  #BY3 viser befolkningen i byområder
+df_søg <- dst_search(string = "Befolkning", field = "text")
+df_søg[df_soeg$id == "BY3", ]  #BY3 viser befolkningen i byområder
 
 #derefter henter vi tabellens beskrivelse og ser, hvilke variable vi kan vælge på
 by3_meta <- dst_meta(table = "BY3", lang = "da")
@@ -87,11 +88,12 @@ table(df_byer_bycat$bycat)  #antal byer i hver kategori
 
 #### Opgave 1.3 – Merge de to dataframes ####
 #nu tilføjer vi readxl, som kan læse Excel-filen
+
 library(readxl)
 
 #for at kunne bruge boligdata læser vi filen ind
 filsti_bolig <- "boligsiden OLA.xlsx"
-df_bolig_raa <- read_excel(filsti_bolig, skip = 1)
+df_bolig_raa <- read_excel("Ida Rstudio Projekter/OLA 1/boligsiden OLA.xlsx", skip = 1)
 
 #derefter laver vi teksten "NA" om til rigtige NA og fjerner rækker med manglende værdier
 df_bolig_raa[df_bolig_raa == "NA"] <- NA
@@ -167,7 +169,7 @@ df_bolig_bycat <- merge(
 
 nrow(df_bolig_renset) == nrow(df_bolig_bycat)  #skal være TRUE
 sum(is.na(df_bolig_bycat$bycat))  #boliger uden match i DST: 414
-head(sort(table(df_bolig_bycat$by[is.na(df_bolig_bycat$bycat)]), decreasing = TRUE), 25)
+head(sort(table(df_bolig_bycat$by[is.na(df_bolig_bycat$bycat)]), decreasing = TRUE), 50)
 
 #til sidst fjerner vi boliger uden bycat
 df_bolig_bycat <- df_bolig_bycat[!is.na(df_bolig_bycat$bycat), ]
@@ -190,6 +192,11 @@ laveste <- df_kvmpris_bycat$bycat[df_kvmpris_bycat$kvmpris == min(df_kvmpris_byc
 forskel_pct <- round((max(df_kvmpris_bycat$kvmpris) / min(df_kvmpris_bycat$kvmpris) - 1) * 100)
 
 #nu tilføjer vi ggplot2
+install.packages("ggplot2")
+install.packages("tidyverse")
+
+
+
 library(ggplot2)
 
 ggplot(df_kvmpris_bycat, aes(x = bycat, y = kvmpris)) +
@@ -876,6 +883,7 @@ ggplot(samlet_lm_df, aes(y = FT_CPD, x = Forbrugertillid_DI)) +
 #### Opgave 5.1 – Kvartalsvis årlig realvækst for en række Eurolande ####
 #for at hente data fra Eurostat bruger vi pakken restatapi
 #nu tilføjer vi restatapi
+
 library(restatapi)
 
 #vi har valgt at tage data til og med 2026K2 i stedet for at stoppe i 2023
@@ -1115,6 +1123,7 @@ ggplot(samlet_df_opg_5.4, aes(x = reorder(Land_kort, -Forskel), y = Forskel, fil
 
 #til sidst plotter vi udviklingen i realvæksten for alle landene
 #nu tilføjer vi scales, som kun bruges til at sætte procenttegn på aksen i plottet
+install.packages("scales")
 library(scales)
 
 plot_5.4_df <- pivot_longer(samlet_RV_df_EU_stat,

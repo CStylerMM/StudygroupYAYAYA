@@ -699,6 +699,8 @@ table(df_model$retning)
 mean(df_model$retning == "OP")
 df_model$År[df_model$retning == "NED"]
 addmargins(konfusion)
+
+
 #### Opgave 4: Stabilitet ####
 
 #Vi bruger samme X og y som i opgave 1, og tester hvor stabil hver kombination er

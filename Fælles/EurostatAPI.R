@@ -144,7 +144,7 @@ youngmomsmeta <- get_eurostat_dsd("demo_r_fagec3")
 unique(youngmomsmeta$concept)         #Hvad er der?
 #"freq" "age"  "unit" "geo" 
 youngmomsmeta %>% filter(concept=="age") %>% select(code) %>% unique()
-<<<<<<< Updated upstream
+Updated upstream
 
 
 #data fra eurostat
@@ -303,8 +303,7 @@ bvmerge %>% filter(age=='Y15-19') %>%
   facet_wrap(~age)
 
 colnames()
-=======
->>>>>>> Stashed changes
+
 
 
 #data fra eurostat

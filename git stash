@@ -1,0 +1,39 @@
+[1mdiff --git "a/F\303\246lles/EurostatAPI.R" "b/F\303\246lles/EurostatAPI.R"[m
+[1mindex c46f40d..02d50d2 100644[m
+[1m--- "a/F\303\246lles/EurostatAPI.R"[m
+[1m+++ "b/F\303\246lles/EurostatAPI.R"[m
+[36m@@ -29,4 +29,33 @@[m [msel = allTabs %>% select(c(title,code)) %>% filter(str_detect(title, "birth")) %[m
+ youngmomsmeta <- get_eurostat_dsd("demo_r_fagec3")[m
+ unique(youngmomsmeta$concept)         #Hvad er der?[m
+ #"freq" "age"  "unit" "geo" [m
+[32m+[m[32myoungmomsmeta %>% filter(concept=="age") %>% select(code) %>% unique()[m
+ [m
+[32m+[m
+[32m+[m[32m#data fra eurostat[m
+[32m+[m[32m#vi laver en liste[m
+[32m+[m[32mmyfilter=list([m
+[32m+[m[32m  age=c("Y10-14","Y15-19"),[m
+[32m+[m[32m  geo=c("^DE.*", "DK.*", "ES.*", "RO.*", "FI.*", "HU.*"))[m
+[32m+[m[41m  [m
+[32m+[m[41m  [m
+[32m+[m[32mclean_restatapi_cache()[m
+[32m+[m[32myoungmomsDF = get_eurostat_data("demo_r_fagec3",[m
+[32m+[m[32m                                filters = myfilter,[m
+[32m+[m[32m                                date_filter= "2000":"2026"[m
+[32m+[m[32m                                )[m[41m  [m
+[32m+[m[32m#Prepare date for Germany[m
+[32m+[m[32myoungmomsDFDE = youngmomsDF[grepl("DE.*", youngmomsDF$geo),][m
+[32m+[m[32myoungmomsDFDE$nut0 = grepl("DE$", youngmomsDFDE$geo)[m
+[32m+[m[32myoungmomsDFDE$nut1 = grepl("DE[0-9]{1}$", youngmomsDFDE$geo)[m
+[32m+[m[32myoungmomsDFDE$nut2 = grepl("DE[0-9]{2}$", youngmomsDFDE$geo)[m
+[32m+[m[32myoungmomsDFDE$nut3 = grepl("DE[0-9]{3}$", youngmomsDFDE$geo)[m
+[32m+[m[32m#youngmomsDFDE %>% filter(nut1==T %>% count()[m
+[41m+[m
+[41m+  [m
+[41m+ [m
+[41m+[m
+[41m+ [m
+[41m+  [m
+[41m+  [m
+[41m+  [m
+\ No newline at end of file[m

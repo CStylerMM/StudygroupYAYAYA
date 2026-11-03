@@ -6,8 +6,8 @@ baseurl <- "https://opensky-network.org/api"
 
 endpoints <- "/states/all"
 query <-""
-un <- "casperstegler@gmail.com"
-pw <-  "lang bøege"
+un <- "casperstegler@gmail.com-api-client"
+pw <-  "EgpDTuSaWMPBZtM5TgUdJp0SYTcu8h28"
 
 totalurl <- paste0(baseurl,endpoints)
 res <- httr::GET(totalurl,authenticate(un,pw))

@@ -5,7 +5,7 @@ library(dplyr)
 
 
 clientId="casperstegler@gmail.com-api-client"
-clientSecret="EgpDTuSaWMPBZtM5TgUdJp0SYTcu8h28"
+clientSecret <- Sys.getenv("OPENSKY_SECRET")
 
 
 # Request an access token

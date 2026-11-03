@@ -1,5 +1,5 @@
 clientId="casperstegler@gmail.com-api-client"
-clientSecret="EgpDTuSaWMPBZtM5TgUdJp0SYTcu8h28"
+clientSecret="REDACTED"
 
 
 # Request an access token

@@ -33,11 +33,11 @@ getRawFromUrl <- function(url) {
   res
 }
 
-#rawres <- getRawFromUrl(toturl)
-#rawres=GET(
-#  url = toturl,
-#  add_headers(Authorization = paste("Bearer", token, sep = " "))
-#)
+rawres <- getRawFromUrl(toturl)
+rawres=GET(
+  url = toturl,
+  add_headers(Authorization = paste("Bearer", token, sep = " "))
+)
 
 # tjek statuskode
 rawres$status_code 

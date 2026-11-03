@@ -14,3 +14,7 @@
 # Util
 util.R
 Util.R
+credentials.json
+.Renviron
+.RData
+.Rhistory

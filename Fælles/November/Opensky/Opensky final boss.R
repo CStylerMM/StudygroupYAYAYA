@@ -83,7 +83,8 @@ currwithop=currentDF |> left_join(tabsdf)
 
 
 # get the airports
-airports=read.csv("/Users/vandmelonsguru/Dataanalyse/StudygroupYAYAYA/Fælles/November/Opensky/airports.csv")
+#på min mac: read.csv(/"Users/vandmelonsguru/Dataanalyse/StudygroupYAYAYA/Fælles/November/Opensky/airports.csv
+airports <- read.csv("Fælles/November/Opensky/airports.csv")
 colnames(airports)
 
 # get iban countries 

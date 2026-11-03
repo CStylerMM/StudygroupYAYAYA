@@ -1,5 +1,5 @@
-clientId="thorwulf-api-client"
-clientSecret="abdabdadfas"
+clientId="casperstegler@gmail.com-api-client"
+clientSecret="EgpDTuSaWMPBZtM5TgUdJp0SYTcu8h28"
 
 
 # Request an access token

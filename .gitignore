@@ -10,3 +10,7 @@
 .Rhistory
 .RData
 .DS_Store
+
+# Util
+util.R
+Util.R

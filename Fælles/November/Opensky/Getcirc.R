@@ -197,3 +197,4 @@ if (length(logliste) > 0) {
 } else {
   message("Ingen scanninger gav data")
 }
+

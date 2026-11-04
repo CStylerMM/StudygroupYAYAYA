@@ -8,6 +8,7 @@ library(lubridate)
 source("Fælles/November/Opensky/Util.R")
 library(ggplot2)
 library(sf)
+install.packages("rnaturalearthdata")
 library(rnaturalearth)
 
 
@@ -162,3 +163,4 @@ ggplot() +
     ylim = range(tykdf$lat, na.rm = TRUE) + c(-1, 1)
   ) +
   theme_minimal()
+

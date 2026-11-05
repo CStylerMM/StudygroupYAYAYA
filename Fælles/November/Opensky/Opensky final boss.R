@@ -148,7 +148,7 @@ plot(tykdfH2$time,tykdfH2$crs)
 sd(tykdfH$crs)
 sd(tykdfH2$crs)
 
-
+# 
 world <- ne_countries(scale = "medium", returnclass = "sf")
 ggplot() +
   geom_sf(data = world, fill = "grey90", color = "white") +

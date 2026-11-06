@@ -1,5 +1,8 @@
 library(rvest)   # webscraping
 library(dplyr)   # datamanipulation (bruger %>%)
+#install.packages("chromote")
+library(chromote)
+
 library(tryCatchLog) #til at catche de logs vi får
 # install.packages(c("rvest", "dplyr"))
 # Step 1: hent siden

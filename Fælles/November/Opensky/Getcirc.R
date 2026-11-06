@@ -182,6 +182,7 @@ while (counter < limit) {
   if (counter < limit) Sys.sleep(freq)
 }
 
+
 # ---------- 6) Resultat og kort ----------
 if (length(logliste) > 0) {
   logdf <- do.call(rbind, logliste)

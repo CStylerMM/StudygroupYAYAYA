@@ -8,7 +8,6 @@ library(lubridate)
 source("Fælles/November/Opensky/Util.R")
 library(ggplot2)
 library(sf)
-install.packages("rnaturalearthdata")
 library(rnaturalearth)
 
 
@@ -149,7 +148,7 @@ plot(tykdfH2$time,tykdfH2$crs)
 sd(tykdfH$crs)
 sd(tykdfH2$crs)
 
-
+# 
 world <- ne_countries(scale = "medium", returnclass = "sf")
 ggplot() +
   geom_sf(data = world, fill = "grey90", color = "white") +
@@ -163,4 +162,3 @@ ggplot() +
     ylim = range(tykdf$lat, na.rm = TRUE) + c(-1, 1)
   ) +
   theme_minimal()
-

@@ -18,3 +18,4 @@ credentials.json
 .Renviron
 .RData
 .Rhistory
+.DS_Store

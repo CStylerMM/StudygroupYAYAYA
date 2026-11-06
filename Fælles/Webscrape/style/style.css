@@ -1,3 +1,25 @@
 .art {
   color: red;
+  width: 1200;
+  height: 600;
+  border-block-color: black;
+ 
 }
+.værk {
+  display: inline-block;   /* står side om side i stedet for under hinanden */
+  vertical-align: top;
+  width: 250px;
+  border: 1px solid black;
+  padding: 10px;
+  margin: 10px;
+}
+
+.værk img {
+  width: 200px;
+}
+
+.like {
+  font-size: 24px;
+  text-decoration: none;
+}
+

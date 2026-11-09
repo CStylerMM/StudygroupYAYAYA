@@ -20,3 +20,6 @@ credentials.json
 .Rhistory
 .DS_Store
 .DS_Store
+
+SQL/Data/
+SQL/my.ini

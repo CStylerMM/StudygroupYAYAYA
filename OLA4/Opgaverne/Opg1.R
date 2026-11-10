@@ -4,10 +4,13 @@ library(rvest)
 library(stringr)
 library(tryCatchLog)
 
-a <- ChromoteSession$new()  
+
+baseurl <- "https://www.bilbasen.dk/brugt/bil/mercedes?pricetype=Retail"  #uden CVR-biler og biler uden afgift
+
+a <- ChromoteSession$new()
 a$view()
-a$go_to("https://www.bilbasen.dk/brugt/bil/mercedes?includeengroscvr=true&includeleasing=false&page=2")  #ingen a <- foran
-Sys.sleep(5)  #indlæser JS
+a$go_to(paste0(baseurl, "&page=2")) 
+Sys.sleep(5) #indlæser JS
 
 class(a)  #skal sige "ChromoteSession" "R6" ellers kan vi sgu ikke scrape :/
 
@@ -208,8 +211,7 @@ hent_bil(kasser[[2]])
 
 ####------ én side bliver til 30 rækker + vi laver også lige log på ------####
 
-baseurl <- "https://www.bilbasen.dk/brugt/bil/mercedes?includeengroscvr=true&includeleasing=false"
-
+baseurl <- "https://www.bilbasen.dk/brugt/bil/mercedes?pricetype=Retail"  # uden CVR-biler og biler uden afgift
 hent_side <- function(side_nr) {
   url <- paste0(baseurl, "&page=", side_nr)
   a$go_to(url)  
@@ -284,5 +286,52 @@ fejlede  #sider vi skal prøve igen
 nrow(df_mercedes)  #ca. 3.400
 colSums(is.na(df_mercedes))  #NA i hver kolonne
 
-saveRDS(df_mercedes, "OLA4/Opgaverne/df_mercedes.rds")  #den færdige dataframe, til opgave 2
-write.csv(df_mercedes, "OLA4/Opgaverne/df_mercedes.csv", row.names = FALSE)  #samme data som csv, hvis nogen i gruppen vil åbne den i Excel
+nrow(gammel)  #skal være 3000, den gamle serie med CVR-biler
+nrow(df_mercedes)  #skal være 2995, den nye serie uden CVR-biler
+
+saveRDS(gammel, "OLA4/Opgaverne/df_mercedes_inkl_cvr.rds")  #3000 rækker, MED CVR-biler
+saveRDS(df_mercedes, "OLA4/Opgaverne/df_mercedes.rds")  #2995 rækker, UDEN CVR-biler, den vi arbejder videre med
+write.csv(df_mercedes, "OLA4/Opgaverne/df_mercedes.csv", row.names = FALSE)  #csv'en skal også være den nye serie
+
+nrow(readRDS("OLA4/Opgaverne/df_mercedes.rds"))  #skal være 2995
+nrow(readRDS("OLA4/Opgaverne/df_mercedes_inkl_cvr.rds"))  #skal være 3000
+
+###------ Rensning ------####
+
+df_mercedes <- readRDS("OLA4/Opgaverne/df_mercedes.rds")  #den nye serie, 2995 biler
+
+#først: hvordan ser årgang og km ud i virkeligheden?
+df_mercedes %>%
+  select(årgang, km) %>%
+  head(10)
+
+#hvilke forskellige former har de? (tjek for noget skævt)
+df_mercedes %>%
+  count(årgang) %>%
+  arrange(desc(n)) %>%
+  head(10)
+
+df_mercedes %>%
+  filter(!str_detect(km, "^[0-9.]+ km$")) %>%
+  select(carid, model, årgang, km)  #km der ikke ligner "42.000 km"
+
+#vi laver en ny dataframe, så den rå df_mercedes står uberørt
+df_mercedes_renset <- df_mercedes %>%
+  mutate(
+    måned = as.numeric(str_extract(årgang, "^\\d+")),  #tallet før / (^ = starten af teksten)
+    år = as.numeric(str_extract(årgang, "\\d{4}$")),  #de fire cifre til sidst ($ = slutningen)
+    km = as.numeric(str_remove_all(km, "[^0-9]"))  #fjerner punktum og " km", så 69.000 km bliver 69000
+  )
+
+#tjek: ser det rigtigt ud?
+df_mercedes_renset %>%
+  select(årgang, måned, år, km) %>%
+  head()
+
+#tjek: er der blevet NA af konverteringen?
+sum(is.na(df_mercedes_renset$måned))
+sum(is.na(df_mercedes_renset$år))
+sum(is.na(df_mercedes_renset$km))
+
+summary(df_mercedes_renset$år)  #mindste og største årgang, noget uden for 1950-2026 er mistænkeligt
+summary(df_mercedes_renset$km)

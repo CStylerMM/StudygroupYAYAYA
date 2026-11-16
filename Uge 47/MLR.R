@@ -1,0 +1,7 @@
+#Multinominal logistisk regression
+
+
+
+
+
+

@@ -39,8 +39,6 @@ df_biler <- df_mercedes_OLA %>%
          km = as.integer(str_remove_all(km, "\\D")),
          sold = FALSE) %>%
   select(carid, forhandler_id, link, model, variant, år, km, beskrivelse, email, telefon, sold)
-names(df_mercedes_OLA)
-
 
 #pris: prisid laver databasen selv, så den skal ikke med
 df_pris <- df_mercedes_OLA %>%
@@ -67,7 +65,6 @@ max(str_length(df_biler$email), na.rm = TRUE)
 max(str_length(df_forhandler$sted), na.rm = TRUE)
 
 # ---------- Send data til databasen ----------
-
 #append = TRUE betyder, at R putter rækker i de tabeller, vi lavede i 2.1, i stedet for at lave nye
 #rækkefølgen er vigtig: forhandler før biler, biler før pris, ellers brokker fremmednøglerne sig
 dbWriteTable(con, "forhandler", df_forhandler, append = TRUE, row.names = FALSE)
@@ -81,3 +78,16 @@ dbGetQuery(con, "SELECT COUNT(*) FROM pris")
 
 #og viewet fra 2.1 skal nu vise den nyeste pris for hver bil
 dbGetQuery(con, "SELECT * FROM seneste_pris LIMIT 5")
+
+# ---------- INSERT-statements til GitHub ----------
+
+#sqlAppendTable laver de INSERT-sætninger, som dbWriteTable sendte til databasen
+inserts <- c(sqlAppendTable(con, "forhandler", df_forhandler, row.names = FALSE),
+             sqlAppendTable(con, "biler", df_biler, row.names = FALSE),
+             sqlAppendTable(con, "pris", df_pris, row.names = FALSE))
+
+#gemmer dem som .sql, i samme rækkefølge som de blev sendt
+writeLines(c("USE bilbasen;", paste0(inserts, ";")),
+           "~/Dataanalyse/StudygroupYAYAYA/OLA4/Opgaverne/Opg_2.2_inserts.sql")
+
+

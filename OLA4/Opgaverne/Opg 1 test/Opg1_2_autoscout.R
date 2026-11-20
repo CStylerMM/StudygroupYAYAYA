@@ -5,7 +5,7 @@ library(chromote)
 library(rvest)
 library(stringr)
 library(dplyr)
-library(tryCatchLog)
+
 
 
 #tester med den her med pris fra 10.000 til 50.000 €
@@ -19,19 +19,19 @@ a$view()
 a$go_to(paste0(baseurl)) 
 
 ####------ én bil ad gangen ------####
-hent_tysk_bil <- function(kasse) {
-  attrs <- html_attrs(kasse)
+hent_tysk_bil <- function(article) {
+  attrs <- html_attrs(article)
   hent <- function(navn) ifelse(navn %in% names(attrs), attrs[[navn]], NA)  #nogle biler mangler et felt
 
-  titel <- kasse %>%
+  titel <- article %>%
     html_element("h2") %>%
     html_text2()
 
-  forhandler <- kasse %>%
+  forhandler <- article %>%
     html_element("[data-testid='dealer-company-name']") %>%
     html_text2()  
 
-  forhandler_adresse <- kasse %>%
+  forhandler_adresse <- article %>%
     html_element("[data-testid='dealer-address']") %>%
     html_text2()
 
@@ -57,13 +57,13 @@ hent_tysk_side <- function(url, side_nr) {
   Sys.sleep(sample(5:8, 1))  #det er DEN her, der giver JS tid, ikke go_to
 
   html <- a$Runtime$evaluate("document.documentElement.outerHTML")$result$value  #den færdige side efter JS
-  kasser <- read_html(html) %>%
+  articler <- read_html(html) %>%
     html_elements("article")
 
-  cat("  side", side_nr, ":", length(kasser), "biler\n")
-  if (length(kasser) == 0) return(NULL)
+  cat("  side", side_nr, ":", length(articler), "biler\n")
+  if (length(articler) == 0) return(NULL)
 
-  lapply(kasser, hent_tysk_bil) %>%
+  lapply(articler, hent_tysk_bil) %>%
     bind_rows()
 }
 

@@ -5,7 +5,7 @@ library(chromote)
 library(rvest)
 library(stringr)
 library(dplyr)
-library(tryCatchLog)
+
 
 
 #tester med den her med pris fra 10.000 til 50.000 €

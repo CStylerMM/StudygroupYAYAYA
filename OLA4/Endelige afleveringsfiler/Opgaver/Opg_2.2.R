@@ -82,9 +82,10 @@ dbGetQuery(con, "SELECT * FROM seneste_pris LIMIT 5")
 # ---------- INSERT-statements til GitHub ----------
 
 #sqlAppendTable laver de INSERT-sætninger, som dbWriteTable sendte til databasen
+#datoen laves om til tekst først, ellers kommer den uden '' og MySQL læser 2026-11-17 som et regnestykke
 inserts <- c(sqlAppendTable(con, "forhandler", df_forhandler, row.names = FALSE),
              sqlAppendTable(con, "biler", df_biler, row.names = FALSE),
-             sqlAppendTable(con, "pris", df_pris, row.names = FALSE))
+             sqlAppendTable(con, "pris", df_pris %>% mutate(scrapedate = as.character(scrapedate)), row.names = FALSE))
 
 #gemmer dem som .sql, i samme rækkefølge som de blev sendt
 writeLines(c("USE bilbasen;", paste0(inserts, ";")),

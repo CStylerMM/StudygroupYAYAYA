@@ -89,6 +89,6 @@ inserts <- c(sqlAppendTable(con, "forhandler", df_forhandler, row.names = FALSE)
 
 #gemmer dem som .sql, i samme rækkefølge som de blev sendt
 writeLines(c("USE bilbasen;", paste0(inserts, ";")),
-           "~/Dataanalyse/StudygroupYAYAYA/OLA4/Opgaverne/Opg_2.2_inserts.sql")
+           "~/Dataanalyse/StudygroupYAYAYA/OLA4/Endelige afleveringsfiler/Opgaver/Opg_2.2_inserts.sql")
 
 

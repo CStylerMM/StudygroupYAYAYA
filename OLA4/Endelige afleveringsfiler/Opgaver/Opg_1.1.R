@@ -8,7 +8,6 @@ library(chromote)     # styrer en rigtig Chrome-browser (Bilbasen bygger siden m
 library(rvest)        # læser og søger i HTML
 library(dplyr)        # bind_rows, distinct, mutate osv.
 library(stringr)      # tekstrensning med regulære udtryk
-# fejl fanges med tryCatch, som er indbygget i R (ingen pakke nødvendig)
 
 # ---------- URL ----------
 # pricetype=Retail    = kun kontantpris (ingen engros/CVR eller biler uden afgift)
@@ -213,10 +212,10 @@ colSums(is.na(df_mercedes))  # NA pr. kolonne
 # ==========================================================
 # scrapes varierer fra dag til dag – analysen og opgave 2 bruger den gemte kørsel fra 17/11,
 # så resultaterne kan genskabes
-df_mercedes_OLA_v2 <- readRDS("df_mercedes_OLA_v2.rds")
+df_mercedes_OLA <- readRDS("df_mercedes_OLA_v2.rds")
 
 # ---------- 1. lav kolonnerne ----------
-df_mercedes_renset <- df_mercedes_OLA_v2 |>
+df_mercedes_renset <- df_mercedes_OLA |>
   distinct(carid, .keep_all = TRUE) |>                               # fjerner 1 dublet
   mutate(
     pris      = as.numeric(str_remove_all(pris, "[^0-9]")),          # "334.900 kr." -> 334900 (tekst i v2)

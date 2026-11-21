@@ -1,45 +1,45 @@
-# ==========================================================
-# OLA 4 – Opgave 1.2: Hent Mercedes fra Tyskland (autoscout24)
-# Bygger på Caspers funktioner – rettet, så hele prisspektret dækkes,
-# og så udvalget matcher Bilbasen (brugte biler, kun forhandlere)
-# ==========================================================
+# ---------- Opg 1.2: Hent Mercedes fra Tyskland (autoscout24) ----------
+#bygger på vores scrape fra Bilbasen, men rettet så hele prisskalaen kommer med,
+#og så udvalget passer med Bilbasen (brugte biler og kun forhandlere)
 
-# ---------- pakker ----------
-library(chromote)     # rigtig Chrome-browser (autoscout24 bygger siden med JavaScript)
-library(rvest)        # læser og søger i HTML
-library(dplyr)        # bind_rows, distinct, filter, mutate
-library(stringr)      # tekstrensning
-# fejl fanges med tryCatch, som er indbygget i R (ingen pakke nødvendig)
+# ---------- Pakker ----------
+#chromote styrer en rigtig Chrome, fordi autoscout24 bygger siden med JavaScript
+library(chromote)
+#rvest læser html'en
+library(rvest)
+#dplyr til bind_rows, distinct, filter og mutate
+library(dplyr)
+#stringr til tekst
+library(stringr)
+#tryCatch er indbygget i R, så den skal ikke have en pakke
 
 # ---------- URL ----------
-# cy=D              = biler i Tyskland
-# atype=C           = personbiler
-# ustate=U          = kun BRUGTE (Caspers version havde N%2CU = nye + brugte)
-# custtype=D        = kun forhandlere (som Bilbasen) – vi filtrerer også på sælgertype bagefter for en sikkerheds skyld
-# damaged_listing   = skadede biler udelukkes
-# sort=age&desc=1   = nyeste annoncer først. Neutral i forhold til pris, så vi ikke kun får
-#                     de billigste i hvert interval (Caspers sort=price gav netop det problem)
+#cy=D giver biler i Tyskland
+#atype=C giver personbiler
+#ustate=U giver kun brugte biler (vores første version havde N%2CU, som også tog nye med)
+#custtype=D giver kun forhandlere som på Bilbasen. vi filtrerer også på sælgertype bagefter for en sikkerheds skyld
+#damaged_listing tager skadede biler ud
+#sort=age&desc=1 giver de nyeste annoncer først. det er neutralt i forhold til pris, så vi ikke kun får
+#de billigste i hvert interval (vores første version med sort=price gav lige præcis det problem)
 baseurl <- "https://www.autoscout24.com/lst/mercedes-benz?cy=D&atype=C&ustate=U&custtype=D&damaged_listing=exclude&ocs_listing=include&powertype=kw&sort=age&desc=1"
 
 
-# ==========================================================
-# Funktion 1: hent ÉN tysk bil (én article) -> én række
-# ==========================================================
-# autoscout24 lægger næsten alt som data-attributter direkte på <article>,
-# så vi kan læse rene værdier uden at rense tekst
+# ---------- Funktion 1: hent én tysk bil ----------
+#autoscout24 lægger næsten alt som data-attributter direkte på <article>,
+#så vi kan læse rene værdier uden at rense tekst
 hent_tysk_bil <- function(kasse) {
   attrs <- html_attrs(kasse)
   
-  # hent en attribut – findes den ikke, bliver den NA (så kolonnerne aldrig forskydes)
+  #henter en attribut. findes den ikke, bliver den NA, så kolonnerne ikke bliver forskudt
   hent <- function(navn) if (navn %in% names(attrs)) attrs[[navn]] else NA
   
   titel <- kasse |> html_element("h2") |> html_text2()
   
-  # bilens link står ikke i HTML'en (siden åbnes med JavaScript) – bygges ud fra guid
-  # testet 19/11: /offers/<guid> åbner bilens side
+  #linket står ikke i html'en, fordi siden åbnes med JavaScript. derfor bygger vi det ud fra guid
+  #testet 19/11: /offers/<guid> åbner bilens side
   link <- paste0("https://www.autoscout24.com/offers/", hent("data-guid"))
   
-  # forhandlerens side på autoscout24 – fungerer som forhandler-id
+  #forhandlerens side på autoscout24 bruger vi som forhandler-id
   forhandler_link <- kasse |>
     html_element("a[href*='/dealerinfo/']") |>
     html_attr("href")
@@ -53,57 +53,63 @@ hent_tysk_bil <- function(kasse) {
     html_text2()
   
   data.frame(
-    guid               = hent("data-guid"),                  # autoscouts bil-id (svarer til carid)
+    #autoscouts id på bilen (ligesom carid)
+    guid               = hent("data-guid"),
     link               = link,
-    make               = hent("data-make"),                  # bruges til at smide reklamer for andre mærker ud
-    model              = hent("data-model"),                 # fx "e 220"
+    #bruges til at smide reklamer for andre mærker ud
+    make               = hent("data-make"),
+    #fx "e 220"
+    model              = hent("data-model"),
     titel              = titel,
-    pris_eur           = as.numeric(hent("data-price")),     # rent tal i euro
+    #pris i euro som rent tal
+    pris_eur           = as.numeric(hent("data-price")),
     km                 = as.numeric(hent("data-mileage")),
-    første_reg         = hent("data-first-registration"),    # fx "10-2018" eller "new"
-    brændstof_kode     = hent("data-fuel-type"),             # NY: fx "d" = diesel (oversættes bagefter)
-    sælgertype         = hent("data-seller-type"),           # d = forhandler, p = privat
+    #fx "10-2018" eller "new"
+    første_reg         = hent("data-first-registration"),
+    #fx "d" for diesel (oversættes bagefter)
+    brændstof_kode     = hent("data-fuel-type"),
+    #d er forhandler og p er privat
+    sælgertype         = hent("data-seller-type"),
     postnr             = hent("data-listing-zip-code"),
     forhandler         = forhandler,
     forhandler_adresse = forhandler_adresse,
-    forhandler_link    = forhandler_link,                    # NY: forhandler-id
+    #forhandler-id
+    forhandler_link    = forhandler_link,
     scrapedate         = Sys.Date()
   )
 }
 
 
-# ==========================================================
-# Funktion 2: hent ÉN side -> ca. 20 rækker
-# ==========================================================
+# ---------- Funktion 2: hent én side (ca. 20 biler) ----------
 hent_tysk_side <- function(url, side_nr) {
-  # Page$navigate venter ikke på alle reklamer (go_to kan hænge på autoscout24)
+  #Page$navigate venter ikke på alle reklamerne. go_to kunne hænge på autoscout24
   a$Page$navigate(paste0(url, "&page=", side_nr))
-  Sys.sleep(sample(5:8, 1))   # tid til JavaScript + vi hamrer ikke på serveren
+  #pause, så JavaScript kan nå at loade, og vi ikke spammer siden
+  Sys.sleep(sample(5:8, 1))
   
   html <- a$Runtime$evaluate("document.documentElement.outerHTML")$result$value
   kasser <- read_html(html) |> html_elements("article")
   
   cat("  side", side_nr, ":", length(kasser), "biler\n")
   
-  # tom side = intervallet er tømt (ikke en fejl) -> NULL, så loopet går videre
+  #en tom side betyder at intervallet er tømt. det er ikke en fejl, så vi giver NULL og loopet går videre
   if (length(kasser) == 0) return(NULL)
   
   lapply(kasser, hent_tysk_bil) |> bind_rows()
 }
 
 
-# ==========================================================
-# Funktion 3: hent ÉT prisinterval (flere sider)
-# ==========================================================
+# ---------- Funktion 3: hent ét prisinterval (flere sider) ----------
 hent_interval <- function(fra, til, max_sider) {
-  a <<- ChromoteSession$new()   # ny browser pr. interval, så Chrome ikke løber tør for hukommelse
+  #ny browser pr. interval, så Chrome ikke løber tør for hukommelse
+  a <<- ChromoteSession$new()
   url <- paste0(baseurl, "&pricefrom=", fra, "&priceto=", til)
   cat("interval", fra, "-", til, "€\n")
   
   liste <- list()
   for (side in 1:max_sider) {
-    # tryCatch: prøv at hente siden. Går det galt, skriv fejlen i konsollen
-    # og returnér selve fejlen (ikke NULL – NULL betyder "intervallet er tømt")
+    #tryCatch prøver at hente siden. går det galt, skriver den fejlen i konsollen
+    #og giver fejlen tilbage (ikke NULL, for NULL betyder at intervallet er tømt)
     df_side <- tryCatch(
       hent_tysk_side(url, side),
       error = function(e) {
@@ -113,13 +119,16 @@ hent_interval <- function(fra, til, max_sider) {
     )
     
     if (inherits(df_side, "error")) {
-      fejlede <<- c(fejlede, paste0(url, "&page=", side))   # <<- = gem uden for funktionen
-      a <<- ChromoteSession$new()                           # browseren er måske død – start en ny
+      #<<- gemmer uden for funktionen
+      fejlede <<- c(fejlede, paste0(url, "&page=", side))
+      #browseren er måske gået ned, så vi starter en ny
+      a <<- ChromoteSession$new()
       Sys.sleep(5)
       next
     }
     
-    if (is.null(df_side)) break    # tom side = ikke flere biler i intervallet
+    #tom side betyder ikke flere biler i intervallet
+    if (is.null(df_side)) break
     liste[[side]] <- df_side
   }
   
@@ -128,77 +137,84 @@ hent_interval <- function(fra, til, max_sider) {
 }
 
 
-# ==========================================================
-# Prisintervaller – SMALLE, så hele prisspektret dækkes
-# ==========================================================
-# casper version: 7 brede intervaller x 25 sider, sorteret efter pris
-# -> kun de ~500 billigste i hvert interval (fx intet mellem 52.500 og 150.000 €)
-# Nu: intervaller på 5.000 € x 5 sider (ca. 100 biler) -> jævn dækning fra 1.000 til 150.000 €+
-grænser <- c(seq(1000, 150000, by = 5000), 9999999)   # sidste interval er åbent (dyre AMG'er)
+# ---------- Smalle prisintervaller, så hele prisskalaen kommer med ----------
+#vores første version: 7 brede intervaller x 25 sider, sorteret efter pris
+#det gav kun de ca. 500 billigste i hvert interval (fx intet mellem 52.500 og 150.000 €)
+#nu: intervaller på 5.000 € x 5 sider (ca. 100 biler), så vi dækker jævnt fra 1.000 til over 150.000 €
+#sidste interval er åbent opad (dyre AMG'er)
+grænser <- c(seq(1000, 150000, by = 5000), 9999999)
 df_intervaller <- data.frame(
   fra = head(grænser, -1),
   til = tail(grænser, -1)
 )
-nrow(df_intervaller)   # ca. 30 intervaller
+#ca. 30 intervaller
+nrow(df_intervaller)
 
-SIDER_PR_INTERVAL <- 5   # 5 sider x 20 biler = ca. 100 biler pr. interval
+#5 sider x 20 biler giver ca. 100 biler pr. interval
+SIDER_PR_INTERVAL <- 5
 
 
-# ==========================================================
-# Test: ét interval, én side, før vi kører det hele
-# ==========================================================
+# ---------- Test: ét interval og én side før vi kører det hele ----------
 fejlede <- c()
 test <- hent_interval(30000, 35000, max_sider = 1)
-nrow(test)                  # skal være ca. 20
-colSums(is.na(test))        # alle bør have 0 eller få NA (testet 19/11: 0 NA, 20 biler, kun "d")
-table(test$sælgertype)      # skal kun være "d", hvis custtype=D virker
+#skal give ca. 20
+nrow(test)
+#skal give 0 eller få NA (19/11: 0 NA, 20 biler, kun "d")
+colSums(is.na(test))
+#skal kun give "d", hvis custtype=D virker
+table(test$sælgertype)
 head(test)
 
 
-# ==========================================================
-# Kør alle intervaller
-# ==========================================================
+# ---------- Kør alle intervaller ----------
 liste_tysk <- list()
 fejlede    <- c()
 
 for (i in 1:nrow(df_intervaller)) {
   liste_tysk[[i]] <- hent_interval(df_intervaller$fra[i], df_intervaller$til[i],
                                    max_sider = SIDER_PR_INTERVAL)
-  saveRDS(liste_tysk, paste0("tyskland_backup_", Sys.Date(), ".rds"))   # backup efter hvert interval
+  #backup efter hvert interval
+  saveRDS(liste_tysk, paste0("tyskland_backup_", Sys.Date(), ".rds"))
 }
 
-sapply(liste_tysk, nrow)   # antal biler pr. interval – ca. 100, færre i de dyre intervaller
-length(fejlede)            # sider der fejlede – 0 = alt gik godt
+#antal biler pr. interval. ca. 100, færre i de dyre
+sapply(liste_tysk, nrow)
+#sider der fejlede. 0 betyder at alt gik godt
+length(fejlede)
 
-# kør fejlede sider igen (springes over, hvis der ingen er)
+#kører de fejlede sider igen (springes over hvis der ingen er)
 a <- ChromoteSession$new()
 liste_rest <- list()
 for (link in fejlede) {
   url  <- str_remove(link, "&page=\\d+$")
   side <- as.numeric(str_extract(link, "\\d+$"))
-  df_side <- tryCatch(hent_tysk_side(url, side), error = function(e) e)   # fejl -> returnér fejlen
+  #giver fejlen tilbage i stedet for at stoppe
+  df_side <- tryCatch(hent_tysk_side(url, side), error = function(e) e)
   if (!inherits(df_side, "error") && !is.null(df_side)) liste_rest[[link]] <- df_side
 }
 liste_tysk <- c(liste_tysk, liste_rest)
 
 
-# ==========================================================
-# Saml og ryd op
-# ==========================================================
+# ---------- Saml og ryd op ----------
 df_tyskland <- bind_rows(liste_tysk) |>
-  distinct(guid, .keep_all = TRUE) |>     # samme bil kan dukke op to gange, når biler rykker sider
+  #samme bil kan dukke op to gange, når biler rykker sider
+  distinct(guid, .keep_all = TRUE) |>
   filter(
-    make == "mercedes-benz",              # smider reklamer for andre mærker ud
-    sælgertype == "d",                    # kun forhandlere (som Bilbasen)
-    pris_eur > 1000,                      # 1.000 € er pladsholderpriser
-    første_reg != "new"                   # kun brugte biler
+    #smider reklamer for andre mærker ud
+    make == "mercedes-benz",
+    #kun forhandlere (som Bilbasen)
+    sælgertype == "d",
+    #under 1.000 € er pladsholderpriser
+    pris_eur > 1000,
+    #kun brugte biler
+    første_reg != "new"
   )
 
 nrow(df_tyskland)
 
-# brændstofkoder -> samme navne som Bilbasen
-# tjek koderne med count(df_tyskland, brændstof_kode) og et par stikprøver på siden,
-# før du stoler på oversættelsen
+#brændstofkoderne laves om til de samme navne som på Bilbasen
+#tjek koderne med count(df_tyskland, brændstof_kode) og et par stikprøver på siden,
+#før vi stoler på oversættelsen
 count(df_tyskland, brændstof_kode)
 
 df_tyskland <- df_tyskland |>
@@ -207,13 +223,17 @@ df_tyskland <- df_tyskland |>
       brændstof_kode == "b" ~ "Benzin",
       brændstof_kode == "d" ~ "Diesel",
       brændstof_kode == "e" ~ "El",
-      brændstof_kode %in% c("2", "3") ~ "Hybrid",   # el/benzin og el/diesel (plug-in + mild hybrid)
-      TRUE ~ "Andet"                                # LPG, brint osv.
+      #el/benzin og el/diesel (plug-in og mild hybrid)
+      brændstof_kode %in% c("2", "3") ~ "Hybrid",
+      #LPG, brint osv.
+      TRUE ~ "Andet"
     ),
-    måned = as.numeric(str_extract(første_reg, "^\\d{2}")),   # "10-2018" -> 10
-    år    = as.numeric(str_extract(første_reg, "\\d{4}$")),   # "10-2018" -> 2018
+    #"10-2018" giver 10
+    måned = as.numeric(str_extract(første_reg, "^\\d{2}")),
+    #"10-2018" giver 2018
+    år    = as.numeric(str_extract(første_reg, "\\d{4}$")),
     
-    # momsreglen ved import: under 6.000 km ELLER under 6 mdr. siden 1. reg. = "ny" -> +25 % dansk moms
+    #momsreglen ved import: under 6.000 km eller under 6 mdr. siden 1. reg. tæller som "ny", og så skal der dansk moms på (25 %)
     alder_mdr = (as.numeric(format(scrapedate, "%Y")) - år) * 12 +
       (as.numeric(format(scrapedate, "%m")) - måned),
     ny_moms   = km < 6000 | alder_mdr < 6
@@ -227,18 +247,19 @@ summary(df_tyskland$pris_eur)
 saveRDS(df_tyskland, "df_tyskland_v2.rds")
 
 
-#outlier-tjek
+# ---------- Outlier-tjek ----------
 
 df_tyskland |> arrange(desc(pris_eur)) |> select(model, titel, år, km, pris_eur, link) |> head(5)
 df_tyskland |> arrange(pris_eur)       |> select(model, titel, år, km, pris_eur, link) |> head(5)
 df_tyskland |> arrange(år)             |> select(model, titel, år, km, pris_eur, link) |> head(5)
 df_tyskland |> arrange(desc(km))       |> select(model, titel, år, km, pris_eur, link) |> head(5)
 
-#Vi har nogle biler der har "pladsholder-priser" da de først er tilgængelige i maj-måned 2027. 
+#Vi har nogle biler der har "pladsholder-priser" da de først er tilgængelige i maj-måned 2027.
 #Det er antaget at det er pladsholder-priser da bilernes pris ikke matcher markedsprisen
 
-# forudannoncer ("available fra 2027") med pladsholderpris på 500.000 € – kontrolleret manuelt
-df_tyskland |> filter(pris_eur == 500000) |> select(model, titel, år, km, pris_eur)   # se dem først
+#forudannoncer ("available fra 2027") med pladsholderpris på 500.000 €, tjekket på siden
+#se dem først
+df_tyskland |> filter(pris_eur == 500000) |> select(model, titel, år, km, pris_eur)
 
 df_tyskland <- df_tyskland |>
   filter(pris_eur != 500000)
@@ -247,28 +268,30 @@ nrow(df_tyskland)
 
 #nu tjekker vi for varebiler
 
-# varebiler, der er kommet med trods atype=C (personbiler)
+#varebiler, der er kommet med selvom atype=C kun skulle give personbiler
 df_tyskland |> filter(model == "unknown") |> count(titel) |> head(10)
 df_tyskland |> filter(str_detect(titel, regex("sprinter|vito|citan|kasten", ignore_case = TRUE))) |> nrow()
 
 #Der er kommet varebiler og lastbiler med, vi antager at forhandleren har sat den forkerte kategori, dem fjerner vi
 
-# erhvervskøretøjer (varebiler + lastbiler), der er kommet med trods atype=C
+#erhvervskøretøjer (varebiler og lastbiler), der er kommet med selvom atype=C
 erhverv <- "sprinter|vito|citan|kasten|actros|arocs|atego|antos|axor|unimog|econic|kran|kipper|lkw|sattel"
 
 df_tyskland |>
   filter(str_detect(titel, regex(erhverv, ignore_case = TRUE))) |>
-  count(model, sort = TRUE)          # se hvilke der rammes, før vi fjerner
+  #ser hvilke der bliver ramt, før vi fjerner dem
+  count(model, sort = TRUE)
 
 df_tyskland <- df_tyskland |>
-  filter(!str_detect(titel, regex(erhverv, ignore_case = TRUE)))   # ! = IKKE
+  #! betyder ikke
+  filter(!str_detect(titel, regex(erhverv, ignore_case = TRUE)))
 
 nrow(df_tyskland)
 
-# kontrol: alle tilbageværende modeller – står der erhvervskøretøjer, som filteret ikke fangede?
+#tjek: står der stadig erhvervskøretøjer blandt de modeller der er tilbage?
 df_tyskland |> count(model, sort = TRUE) |> as_tibble() |> print(n = Inf)
 
-# samme filter på de danske data, så begge lande behandles ens
+#samme filter på de danske data, så begge lande behandles ens
 df_mercedes_renset <- readRDS("df_mercedes_renset.rds")
 df_mercedes_renset |>
   filter(str_detect(paste(model, variant), regex(erhverv, ignore_case = TRUE))) |>
@@ -278,38 +301,40 @@ df_mercedes_renset <- df_mercedes_renset |>
   filter(!str_detect(paste(model, variant), regex(erhverv, ignore_case = TRUE)))
 saveRDS(df_mercedes_renset, "df_mercedes_renset.rds")
 
-# gem det færdige tyske datasæt (EFTER alle fjernelser)
+#gemmer det færdige tyske datasæt, efter alt er fjernet
 saveRDS(df_tyskland, "df_tyskland_v2.rds")
 
 nrow(df_tyskland)
 
 
-
-# ==========================================================
-# Nu går vi til at teste hypotesen, 
-# Opgave 1.2 – Er tyske biler billigere?
-# Trin 1: gør de to datasæt sammenlignelige
-# ==========================================================
+#Nu går vi til at teste hypotesen,
+# ---------- Er tyske biler billigere? ----------
+#først gør vi de to datasæt sammenlignelige
 library(dplyr)
 library(stringr)
 
 df_dk <- readRDS("df_mercedes_renset.rds")
 df_de <- readRDS("df_tyskland_v2.rds")
 
-nrow(df_dk)   # skal være 2.821
-nrow(df_de)   # skal være 2.623
+#skal give 2.821
+nrow(df_dk)
+#skal give 2.623
+nrow(df_de)
 
-eur_dkk <- 7.46   # fast kurs (DKK er bundet til EUR)
+#fast kurs, kronen er bundet til euroen
+eur_dkk <- 7.46
 
 # ---------- fælles afgrænsning ----------
-# - kun biler fra 2010 og frem (veteranbiler har samlerpriser og egne afgiftsregler)
-# - kun El, Benzin, Diesel (hybrid kan ikke sammenlignes: autoscout blander mild hybrid ind)
+#kun biler fra 2010 og frem, fordi veteranbiler har samlerpriser og egne afgiftsregler
+#kun El, Benzin og Diesel. hybrid kan ikke sammenlignes, fordi autoscout blander mild hybrid ind
 dk <- df_dk |>
   filter(!is.na(år), år >= 2010,
          brændstof %in% c("El", "Benzin", "Diesel")) |>
   mutate(land = "DK",
-         model_kort = str_to_lower(str_remove(model, "^Mercedes ")),   # "Mercedes E220 d" -> "e220 d"
-         model_kort = str_remove_all(model_kort, " "),                  # "e220 d" -> "e220d"
+         #"Mercedes E220 d" bliver til "e220 d"
+         model_kort = str_to_lower(str_remove(model, "^Mercedes ")),
+         #"e220 d" bliver til "e220d"
+         model_kort = str_remove_all(model_kort, " "),
          pris_dkk = pris) |>
   select(land, model_kort, år, km, brændstof, pris_dkk)
 
@@ -317,8 +342,10 @@ de <- df_de |>
   filter(år >= 2010,
          brændstof %in% c("El", "Benzin", "Diesel")) |>
   mutate(land = "DE",
-         model_kort = str_remove_all(model, " "),     # "e 220" -> "e220" (samme format som DK)
-         pris_dkk = pris_eur * eur_dkk) |>             # tysk pris omregnet, UDEN afgift
+         #"e 220" bliver til "e220" (samme format som DK)
+         model_kort = str_remove_all(model, " "),
+         #tysk pris i kr., uden afgift
+         pris_dkk = pris_eur * eur_dkk) |>
   select(land, model_kort, år, km, brændstof, pris_dkk, ny_moms)
 
 nrow(dk)
@@ -326,35 +353,39 @@ nrow(de)
 count(dk, brændstof)
 count(de, brændstof)
 
-# hvor mange modeller findes i begge lande?
+#hvor mange modeller findes i begge lande?
 length(intersect(dk$model_kort, de$model_kort))
 
 
 # ---------- ensret modelnavne ----------
-# Bilbasen: "e220d" (diesel-d) og "eqe350+" (plus) – autoscout24: "e220", "eqe350"
+#Bilbasen skriver "e220d" og "eqe350+", autoscout24 skriver "e220" og "eqe350"
 dk <- dk |>
-  mutate(model_kort = str_remove_all(model_kort, "\\+"),              # fjern +
+  #fjerner +
+  mutate(model_kort = str_remove_all(model_kort, "\\+"),
          model_kort = if_else(brændstof == "Diesel",
-                              str_remove(model_kort, "d$"),           # fjern diesel-d til sidst
+                              #fjerner diesel-d til sidst
+                              str_remove(model_kort, "d$"),
                               model_kort))
 
 de <- de |>
   mutate(model_kort = str_remove_all(model_kort, "\\+"))
 
-# hvor mange modeller og tyske biler kan matches nu?
-length(intersect(dk$model_kort, de$model_kort))   # antal fælles modeller
-mean(de$model_kort %in% dk$model_kort)            # andel tyske biler med en dansk model at sammenligne med
+#hvor mange modeller og tyske biler kan matches nu?
+#antal fælles modeller
+length(intersect(dk$model_kort, de$model_kort))
+#andel tyske biler med en dansk model at sammenligne med
+mean(de$model_kort %in% dk$model_kort)
 
-# de hyppigste tyske modeller UDEN dansk match – er der flere navneforskelle?
+#de mest almindelige tyske modeller uden dansk match. er der flere navneforskelle?
 de |> filter(!model_kort %in% dk$model_kort) |> count(model_kort, sort = TRUE) |> head(15)
 dk |> count(model_kort, sort = TRUE) |> head(15)
 
 
-# AMG-navne (sidste navneforskel)
+#AMG-navne (sidste navneforskel)
 de <- de |> mutate(model_kort = str_remove(model_kort, "amg$"))
 dk <- dk |> mutate(model_kort = if_else(str_detect(model_kort, "^amggt"), "amggt", model_kort))
 
-# median pr. model + årgang + brændstof i hvert land
+#median pr. model, årgang og brændstof i hvert land
 dk_grp <- dk |>
   group_by(model_kort, år, brændstof) |>
   summarise(dk_median = median(pris_dkk), dk_antal = n(), .groups = "drop")
@@ -364,72 +395,75 @@ de_grp <- de |>
   summarise(de_median = median(pris_dkk), de_antal = n(),
             andel_ny_moms = mean(ny_moms), .groups = "drop")
 
-# kun grupper, der findes i BEGGE lande (inner_join = fælles rækker)
+#kun grupper der findes i begge lande (inner_join beholder de fælles rækker)
 sammen <- inner_join(dk_grp, de_grp, by = c("model_kort", "år", "brændstof"))
 
-nrow(sammen)                       # antal sammenlignelige grupper
-sum(sammen$dk_antal); sum(sammen$de_antal)   # antal biler, der indgår
+#antal sammenlignelige grupper
+nrow(sammen)
+#antal biler, der indgår
+sum(sammen$dk_antal); sum(sammen$de_antal)
 sammen |> arrange(desc(dk_antal + de_antal)) |> head(15)
 
 
-# ==========================================================
-# Begrundelse for afgiftssatsen på benzin/diesel
-# ==========================================================
-# afgiftens andel af prisen for en benzin-/dieselbil (2026-skalaen, FDM)
-# 25 % op til 76.400 kr., 85 % op til 237.400 kr., 150 % af resten
-# (bundfradrag og CO2-tillæg er ikke med)
+# ---------- Hvorfor 45 % afgift på benzin og diesel ----------
+#hvor stor en del af prisen afgiften er for en benzin- eller dieselbil (2026-skalaen fra FDM)
+#25 % op til 76.400 kr., 85 % op til 237.400 kr., 150 % af resten
+#bundfradrag og CO2-tillæg er ikke med
 afgift_skala <- function(v) {
   0.25 * pmin(v, 76400) +
     0.85 * pmax(0, pmin(v, 237400) - 76400) +
     1.50 * pmax(0, v - 237400)
 }
 
-værdi  <- c(150000, 200000, 250000, 300000, 400000)   # bilens værdi uden afgift
+#bilens værdi uden afgift
+værdi  <- c(150000, 200000, 250000, 300000, 400000)
 afgift <- afgift_skala(værdi)
 data.frame(værdi, afgift, pris = værdi + afgift,
            andel_af_pris = round(afgift / (værdi + afgift) * 100, 1))
-# -> ud fra tabellen vælger vi 45 % som antagelse
+#ud fra tabellen vælger vi 45 %
 
 
-# ==========================================================
-# Trin B: Hvad koster den tyske bil på danske plader?
-# ==========================================================
-# Vi lægger afgift, moms og omkostninger oveni den tyske pris
-# og sammenligner med den danske pris (begge biler på danske plader)
+# ---------- Hvad koster den tyske bil på danske plader? ----------
+#vi lægger afgift, moms og omkostninger oven i den tyske pris
+#og sammenligner med den danske pris (begge biler på danske plader)
 
-afgift_fossil <- 0.45     # afgift på benzin/diesel = 45 % af den danske pris (skalaen giver typisk 35-50 %)
-omkostninger  <- 5000     # transport, eksportplader, syn (eget skøn)
+#afgift på benzin og diesel er 45 % af den danske pris (skalaen giver typisk 35-50 %)
+afgift_fossil <- 0.45
+#transport, eksportplader og syn (vores eget skøn)
+omkostninger  <- 5000
 
 resultat <- sammen |>
   mutate(
-    # 1. afgift: regnes af den DANSKE pris (reglen for brugte importbiler)
-    #    El: 0 kr. under den afgiftsfri grænse på 419.300 kr. (2026).
-    #        Over grænsen er satsen 60 % af bilens værdi UDEN afgift. Bilbasen-prisen er MED afgift,
-    #        så det svarer til 37,5 % af den del af prisen, der ligger over grænsen (0,6 / 1,6 = 0,375)
-    #    Benzin/diesel: 45 % af den danske pris (skøn ud fra afgiftsskalaen)
+    #1. afgift: regnes af den danske pris, det er reglen for brugte importbiler
+    #el: 0 kr. under den afgiftsfri grænse på 419.300 kr. (2026)
+    #over grænsen er satsen 60 % af bilens værdi uden afgift. prisen på Bilbasen er med afgift,
+    #så det svarer til 37,5 % af den del af prisen, der ligger over grænsen (0,6 / 1,6 = 0,375)
+    #benzin og diesel: 45 % af den danske pris (skøn ud fra afgiftsskalaen)
     afgift = if_else(brændstof == "El",
-                     0.375 * pmax(0, dk_median - 419300),   # el: 37,5 % af prisen over grænsen
-                     afgift_fossil * dk_median),            # benzin/diesel: 45 % af prisen
+                     #el: 37,5 % af prisen over grænsen
+                     0.375 * pmax(0, dk_median - 419300),
+                     #benzin og diesel: 45 % af prisen
+                     afgift_fossil * dk_median),
     
-    # 2. moms: "nye" tyske biler (under 6.000 km / 6 mdr.) -> dansk moms i stedet for tysk = ca. 5 % ekstra
+    #2. moms: "nye" tyske biler (under 6.000 km eller 6 mdr.) skal have dansk moms i stedet for tysk, det er ca. 5 % ekstra
     moms = de_median * andel_ny_moms * 0.05,
     
-    # 3. den tyske bil på danske plader = tysk pris + moms + afgift + omkostninger
+    #3. den tyske bil på danske plader er tysk pris plus moms, afgift og omkostninger
     de_dk_plader = de_median + moms + afgift + omkostninger,
     
-    # 4. forskel: positiv = billigere at hente bilen i Tyskland
+    #4. forskel: er den positiv, er det billigere at hente bilen i Tyskland
     forskel = dk_median - de_dk_plader
   )
 
-# opsummering pr. brændstof
+#opsummering pr. brændstof
 resultat |>
   group_by(brændstof) |>
   summarise(grupper           = n(),
             andel_billigst_de = mean(forskel > 0),
             median_forskel    = median(forskel))
 
-# følsomhed: ret afgift_fossil øverst til 0.35 og 0.55, og kør blokken igen
-# resultat: benzin billigst i DE 45 % / 37 % / 22 %, diesel 60 % / 48 % / 16 %
+#følsomhed: sæt afgift_fossil til 0.35 og 0.55 og kør blokken igen
+#resultat: benzin billigst i DE 45 % / 37 % / 22 %, diesel 60 % / 48 % / 16 %
 
 saveRDS(resultat, "resultat_opgave_1_2.rds")
 
@@ -439,18 +473,19 @@ library(dplyr)
 
 resultat <- readRDS("resultat_opgave_1_2.rds")
 
-# typisk forskel pr. brændstof (3 rækker)
+#typisk forskel pr. brændstof (3 rækker)
 graf_data <- resultat |>
   group_by(brændstof) |>
   summarise(forskel = median(forskel))
 
-# søjlediagram
+#søjlediagram
 ggplot(graf_data, aes(x = factor(brændstof, levels = c("El", "Diesel", "Benzin")),
                       y = forskel, fill = forskel > 0)) +
   geom_col() +
   geom_text(aes(label = paste0(format(round(forskel), big.mark = ".", decimal.mark = ","), " kr."),
                 vjust = ifelse(forskel > 0, -0.5, 1.5)),
-            size = 5) +                                          # tallene over søjlerne +
+            #tallene over søjlerne
+            size = 5) +
   geom_hline(yintercept = 0) +
   labs(title = "Elbiler er typisk billigere at hente i Tyskland - benzinbiler er ikke",
        x = NULL, y = "Besparelse ved import (kr.)") +
@@ -459,8 +494,11 @@ ggplot(graf_data, aes(x = factor(brændstof, levels = c("El", "Diesel", "Benzin"
                      breaks = seq(-50000, 50000, by = 25000),
                      limits = c(-50000, 60000)) +
   theme_minimal() +
-  theme(plot.title   = element_text(size = 18, face = "bold"),   # overskriften
-        axis.text    = element_text(size = 13),                  # tallene på y-aksen + teksten på x-aksen
-        axis.title.y = element_text(size = 14))                  # teksten på y-aksen
+  #overskriften
+  theme(plot.title   = element_text(size = 18, face = "bold"),
+        #tallene på y-aksen og teksten på x-aksen
+        axis.text    = element_text(size = 13),
+        #teksten på y-aksen
+        axis.title.y = element_text(size = 14))
 
 ggsave("graf_opgave_1_2.png", width = 7, height = 4)

@@ -1,94 +1,97 @@
-# ==========================================================
-# OLA 4 – Opgave 1.1: Scrape Mercedes fra Bilbasen
-# Filtre: personbil, Mercedes, kontantpris, forhandler, køb (ikke leasing)
-# ==========================================================
+# ---------- Opg 1.1: Scrape Mercedes fra Bilbasen ----------
+#vi tager kun personbiler, Mercedes, kontantpris, forhandlere og køb (ikke leasing)
 
-# ---------- pakker ----------
-library(chromote)     # styrer en rigtig Chrome-browser (Bilbasen bygger siden med JavaScript)
-library(rvest)        # læser og søger i HTML
-library(dplyr)        # bind_rows, distinct, mutate osv.
-library(stringr)      # tekstrensning med regulære udtryk
+# ---------- Pakker ----------
+#chromote styrer en rigtig Chrome, fordi Bilbasen bygger siden med JavaScript
+library(chromote)
+#rvest læser html'en
+library(rvest)
+#dplyr til bind_rows, distinct og mutate
+library(dplyr)
+#stringr til regulære udtryk
+library(stringr)
 
 # ---------- URL ----------
-# pricetype=Retail    = kun kontantpris (ingen engros/CVR eller biler uden afgift)
-# sellertypes=dealer  = kun forhandlere (ingen private sælgere)
-# fanen "Køb" er standard, så leasing er udelukket
+#pricetype=Retail giver kun kontantpris, så engros/CVR og biler uden afgift ryger ud
+#sellertypes=dealer giver kun forhandlere og ingen private
+#fanen "Køb" er valgt fra start, så leasing er ikke med
 baseurl <- "https://www.bilbasen.dk/brugt/bil/mercedes?pricetype=Retail&sellertypes=dealer"
 
-# ---------- start browser ----------
-a <- ChromoteSession$new()  # "åbner" browseren her
-a$view()                    # vis browservinduet (kun til fejlfinding)
-class(a)                    # skal sige "ChromoteSession" "R6"
+# ---------- Start browser ----------
+#åbner browseren
+a <- ChromoteSession$new()
+#viser browseren, så vi kan se hvad der sker
+a$view()
+#skal sige "ChromoteSession" "R6", ellers kan vi ikke scrape
+class(a)
 
 
-# ==========================================================
-# Funktion 1: hent EN bil (En article) -> En række
-# ==========================================================
-# data-e2e bruges hvor det findes (stabile navne, Bilbasen bruger dem til egne tests)
-# ellers starten af klassenavnet med [class^=...], fordi hash-endelsen (__6B3kE) kan skifte
+# ---------- Funktion 1: hent én bil ----------
+#vi bruger data-e2e hvor det findes. Bilbasen bruger dem selv til test, så de skifter ikke navn
+#ellers starten af klassenavnet med [class^=...], fordi endelsen (fx __6B3kE) kan skifte
 
 hent_bil <- function(kasse) {
   
-  # linket ligger i attributten href, ikke i teksten
+  #linket står i href og ikke i teksten
   link <- kasse |>
     html_element("a[data-e2e='search-result-link']") |>
     html_attr("href")
   
-  # bilens id = sidste tal i linket (\\d+ = et eller flere cifre, $ = tager de digits som står i slutningen)
+  #carid er det sidste tal i linket. \\d+ er et eller flere cifre, og $ betyder at de skal stå til sidst
   carid <- str_extract(link, "\\d+$")
   
-  # kun model, fx "Mercedes EQB250" – ligger rent i attributten data-e2e-value
+  #modellen, fx "Mercedes EQB250", står i data-e2e-value
   model <- kasse |>
     html_element("h3[data-e2e='listing-make-model']") |>
     html_attr("data-e2e-value")
   
-  # variant = hele titlen minus modellen, fx "Progressive 5d"
-  # fixed() = match som ren tekst, så tegn som + og ( ikke tolkes som regex
+  #variant er hele titlen minus modellen, fx "Progressive 5d"
+  #fixed() læser model som almindelig tekst, så + og ( ikke bliver til regex
   variant <- kasse |>
     html_element("[data-e2e='search-result-make-model']") |>
     html_text2() |>
     str_remove(fixed(model)) |>
     str_trim()
   
-  # pris: fjern alt der ikke er et tal, så "394.900 kr." bliver 394900, når ^ står INDE i klammerne betyder det omvendt
-  #(alt der ikke er tal) (hvis det er udenfor så betyder det starten)
+  #pris: vi fjerner alt der ikke er et tal, så "394.900 kr." bliver 394900. ^ inde i [ ] betyder "ikke"
+  #uden for [ ] betyder ^ starten af teksten
   pris <- kasse |>
     html_element("[data-e2e='search-result-price']") |>
     html_text2() |>
     str_remove_all("[^0-9]") |>
     as.numeric()
   
-  # egenskaber: [1] = årgang, [2] = km (renses til tal i rensningsdelen), [class^='Listing_properties'] betyder 
-  #“hvor class starter med ‘Listing_properties’”.
-  #Her bruger vi ^ som "starter med"
+  #egenskaber: [1] er årgang og [2] er km. de bliver lavet til tal i rensningen
+  #[class^='Listing_properties'] betyder at class starter med Listing_properties
+  #her betyder ^ altså "starter med"
   egenskaber <- kasse |>
     html_elements("[class^='Listing_properties'] div") |>
     html_text2()
   
-  # alle detaljer (gear, brændstof, km/l, rækkevidde ...) samles i én tekst
-  # rækkefølgen varierer mellem el- og benzinbiler, så de splittes senere
+  #alle detaljer (gear, brændstof, km/l, rækkevidde) samles i én tekst
+  #rækkefølgen er forskellig for el og benzin, så vi deler dem op senere
   detaljer <- kasse |>
     html_elements("[class^='ListingDetails_listItem']") |>
     html_text2() |>
     paste(collapse = " | ")
   
-  # salgsteksten – forhandlerens navn/adresse/telefon står ofte her
+  #salgsteksten. her skriver forhandleren tit navn, adresse og telefon
   beskrivelse <- kasse |>
     html_element("[class^='Listing_description']") |>
     html_text2()
   
-  # by/postnummer
+  #by og område
   sted <- kasse |>
     html_element("[class^='Listing_location']") |>
     html_text2()
   
-  # logoet står to gange (kort- og listevisning) – html_element tager kun det første
-  # samme logo-URL = samme forhandler, så den bruges som forhandler-id indtil videre
+  #logoet står to gange på siden, og html_element tager kun det første
+  #samme logo betyder samme forhandler, så vi bruger det som forhandler-id
   forhandlerlogo <- kasse |>
     html_element("img[alt='Forhandlerlogo']") |>
     html_attr("src")
   
-  # én række – mangler et felt, bliver det NA, så kolonnerne aldrig forskydes
+  #én række pr. bil. mangler et felt, bliver det NA, så kolonnerne ikke bliver forskudt
   data.frame(
     carid          = carid,
     link           = link,
@@ -101,48 +104,49 @@ hent_bil <- function(kasse) {
     beskrivelse    = beskrivelse,
     sted           = sted,
     forhandlerlogo = forhandlerlogo,
-    scrapedate     = Sys.Date()   # skal bruges i opgave 2
+    #datoen skal bruges i opgave 2
+    scrapedate     = Sys.Date()
   )
 }
 
 
-# ==========================================================
-# Funktion 2: hent ÉN side -> ca. 30 rækker
-# ==========================================================
+# ---------- Funktion 2: hent én side (ca. 30 biler) ----------
 hent_side <- function(side_nr) {
   a$go_to(paste0(baseurl, "&page=", side_nr))
   
-  # tilfældig pause 5-8 sek: tid til JavaScript + vi hamrer ikke på serveren
+  #tilfældig pause på 5-8 sek, så JavaScript kan nå at loade, og vi ikke spammer Bilbasen
   Sys.sleep(sample(5:8, 1))
   
-  # hele siden efter JavaScript er kørt -> rvest-dokument
+  #henter hele siden, når JavaScript er færdig, og giver den til rvest
   html <- a$Runtime$evaluate("document.documentElement.outerHTML")$result$value
   kasser <- read_html(html) |>
-    html_elements("article")          # hver bil er en <article>
+    #hver bil ligger i en <article>
+    html_elements("article")
   
-  cat("Side", side_nr, ":", length(kasser), "biler\n")   # log i konsollen
+  #skriver i konsollen hvor langt vi er
+  cat("Side", side_nr, ":", length(kasser), "biler\n")
   
-  # tom side = noget gik galt -> fejl med vilje, så tryCatch fanger den
+  #er siden tom, er noget gået galt, så vi laver en fejl med vilje, som tryCatch fanger
   if (length(kasser) == 0) stop(paste("ingen biler på side", side_nr))
   
-  lapply(kasser, hent_bil) |>         # kør hent_bil på hver af de 30 biler
-    bind_rows()                       # stak de 30 rækker til én dataframe
+  #kører hent_bil på alle 30 biler
+  lapply(kasser, hent_bil) |>
+    #samler de 30 rækker i én data frame
+    bind_rows()
 }
 
 
-# ==========================================================
-# Test: én bil og én side, før vi kører det hele
-# ==========================================================
+# ---------- Test: én side før vi kører det hele ----------
 test <- hent_side(1)
-nrow(test)                 # skal være ca. 30
-colSums(is.na(test))       # NA pr. kolonne – bør være 0 eller tæt på
+#skal give ca. 30
+nrow(test)
+#NA pr. kolonne, skal være 0 eller tæt på
+colSums(is.na(test))
 head(test)
 
 
-# ==========================================================
-# Hvor mange sider er der?
-# ==========================================================
-# læser "Viser: 2.854 biler til salg" fra siden og regner antal sider ud (30 pr. side)
+# ---------- Hvor mange sider er der? ----------
+#læser "Viser: 2.854 biler til salg" og regner antal sider ud, 30 biler pr. side
 a$go_to(baseurl)
 Sys.sleep(5)
 side_tekst <- read_html(a$Runtime$evaluate("document.documentElement.outerHTML")$result$value) |>
@@ -153,20 +157,22 @@ antal_biler <- side_tekst |>
   str_remove_all("[^0-9]") |>
   as.numeric()
 
-antal_sider <- ceiling(antal_biler / 30)   # ceiling = rund op, så sidste halve side kommer med
+#ceiling runder op, så den sidste halve side kommer med
+antal_sider <- ceiling(antal_biler / 30)
 antal_biler
-antal_sider                                # 2.854 biler -> 96 sider (d. 18/11)
+#2.854 biler giver 96 sider (18/11)
+antal_sider
 
 
-# ==========================================================
-# Scrape alle sider
-# ==========================================================
-liste_sider <- list()   # her gemmes hver side
-fejlede     <- c()      # her noteres sider der fejler
+# ---------- Scrape alle sider ----------
+#her gemmer vi hver side
+liste_sider <- list()
+#her skriver vi sider der fejler
+fejlede     <- c()
 
 for (i in 1:antal_sider) {
-  # tryCatch: prøv at hente siden. Går det galt, skriv fejlen i konsollen
-  # og returnér selve fejlen i stedet for at stoppe loopet
+  #tryCatch prøver at hente siden. går det galt, skriver den fejlen i konsollen
+  #og giver fejlen tilbage i stedet for at stoppe loopet
   resultat <- tryCatch(
     hent_side(i),
     error = function(e) {
@@ -175,100 +181,117 @@ for (i in 1:antal_sider) {
     }
   )
   
-  # her bruger vi inherits til at: ja, det er en fejl → skriv sidenummeret ned
-  # eller nej, det er data → gem siden
+  #inherits tjekker om det er en fejl. er det en fejl, skriver vi sidenummeret ned
+  #er det data, gemmer vi siden
   if (inherits(resultat, "error")) {
     fejlede <- c(fejlede, i)
   } else {
     liste_sider[[i]] <- resultat
   }
   
-  saveRDS(liste_sider, "bilbasen_midlertidig.rds")   # sikkerhedskopi efter hver side
+  #backup efter hver side
+  saveRDS(liste_sider, "bilbasen_midlertidig.rds")
 }
 
-fejlede   # sider der skal køres igen – tom = alt gik godt
+#sider der skal køres igen. er den tom, gik alt godt
+fejlede
 
-# kør fejlede sider igen (springes over, hvis der ingen er)
+#kører de fejlede sider igen (springes over hvis der ingen er)
 for (i in fejlede) {
-  resultat <- tryCatch(hent_side(i), error = function(e) e)   # fejl -> returnér fejlen
+  #giver fejlen tilbage i stedet for at stoppe
+  resultat <- tryCatch(hent_side(i), error = function(e) e)
   if (!inherits(resultat, "error")) liste_sider[[i]] <- resultat
 }
 
 
-# ==========================================================
-# Saml, fjern dubletter og gem
-# ==========================================================
-# nye annoncer skubber biler ned på næste side, så samme bil kan blive hentet to gange
+# ---------- Saml og fjern dubletter ----------
+#nye annoncer skubber biler ned på næste side, så samme bil kan komme med to gange
 df_mercedes <- bind_rows(liste_sider) |>
   distinct(carid, .keep_all = TRUE)
 
-nrow(df_mercedes)            # sammenlign med antal_biler
-colSums(is.na(df_mercedes))  # NA pr. kolonne
+#skal passe med antal_biler
+nrow(df_mercedes)
+#NA pr. kolonne
+colSums(is.na(df_mercedes))
 
 
-
-# ==========================================================
-# Rensning af Caspers data (v2, scrapet 17/11)
-# ==========================================================
-# scrapes varierer fra dag til dag – analysen og opgave 2 bruger den gemte kørsel fra 17/11,
-# så resultaterne kan genskabes
+# ---------- Rensning af scrapet fra 17/11 ----------
+#et scrape giver lidt andre biler hver dag. derfor bruger 1.2 og opgave 2 den gemte kørsel fra 17/11,
+#så vi kan få de samme tal igen
 df_mercedes_OLA <- readRDS("df_mercedes_OLA_v2.rds")
 
 # ---------- 1. lav kolonnerne ----------
 df_mercedes_renset <- df_mercedes_OLA |>
-  distinct(carid, .keep_all = TRUE) |>                               # fjerner 1 dublet
+  #fjerner 1 dublet
+  distinct(carid, .keep_all = TRUE) |>
   mutate(
-    pris      = as.numeric(str_remove_all(pris, "[^0-9]")),          # "334.900 kr." -> 334900 (tekst i v2)
-    måned     = as.numeric(str_extract(årgang, "^\\d+")),            # tallet før / (^ = starten)
-    år        = as.numeric(str_extract(årgang, "\\d{4}$")),          # fire cifre til sidst ($ = slutningen)
-    km        = as.numeric(str_remove_all(km, "[^0-9]")),            # "69.000 km" -> 69000
-    brændstof = str_trim(str_extract(detaljer, "[^|]+$")),           # sidste del af detaljer, fx "Diesel"
-    ny_uregistreret = årgang == "-"                                  # nye biler uden 1. registrering
+    #"334.900 kr." bliver til 334900
+    pris      = as.numeric(str_remove_all(pris, "[^0-9]")),
+    #tallet før / er måneden (^ betyder starten)
+    måned     = as.numeric(str_extract(årgang, "^\\d+")),
+    #fire cifre til sidst er året ($ betyder slutningen)
+    år        = as.numeric(str_extract(årgang, "\\d{4}$")),
+    #"69.000 km" bliver til 69000
+    km        = as.numeric(str_remove_all(km, "[^0-9]")),
+    #brændstof er sidste del af detaljer, fx "Diesel"
+    brændstof = str_trim(str_extract(detaljer, "[^|]+$")),
+    #nye biler uden 1. registrering
+    ny_uregistreret = årgang == "-"
   )
 
 # ---------- 2. tjek ----------
-nrow(df_mercedes_renset)                                             # 2.836
-colSums(is.na(df_mercedes_renset[, c("pris", "måned", "år", "km")])) # 3 NA i måned/år = nye biler
-count(df_mercedes_renset, brændstof)                                 # El, Benzin, Diesel, Plug-in
-sum(df_mercedes_renset$ny_uregistreret)                              # 3
+#skal give 2.836
+nrow(df_mercedes_renset)
+#3 NA i måned og år, det er de nye biler
+colSums(is.na(df_mercedes_renset[, c("pris", "måned", "år", "km")]))
+#El, Benzin, Diesel og Plug-in
+count(df_mercedes_renset, brændstof)
+#skal give 3
+sum(df_mercedes_renset$ny_uregistreret)
 summary(df_mercedes_renset$år)
 summary(df_mercedes_renset$km)
 summary(df_mercedes_renset$pris)
 
-# outliers – kontrolleret manuelt på Bilbasen
+#outliers, som vi har tjekket på Bilbasen
 df_mercedes_renset |> filter(is.na(år)) |> select(model, årgang, km, pris, link)
-# -> nye biler fra 2026 uden 1. registrering, NA er korrekt
+#nye biler fra 2026 uden 1. registrering, så NA er rigtigt
 
 df_mercedes_renset |> arrange(pris) |> select(model, årgang, km, pris, link) |> head(5)
-# -> billigste (9.800 kr.) er et mekanikertilbud, resten er gamle dieselbiler med høj km (ægte)
+#den billigste (9.800 kr.) er et mekanikertilbud. resten er gamle dieselbiler med høj km, og de er ægte
 
 df_mercedes_renset |> arrange(desc(pris)) |> select(model, årgang, km, pris, link) |> head(5)
-# -> AMG GT 63 / GT C, prisen matcher (ægte)
+#AMG GT 63 og GT C, prisen passer, de er ægte
 
 df_mercedes_renset |> arrange(desc(km)) |> select(model, årgang, km, pris, link) |> head(5)
-# -> gamle E-klasser (typiske taxaer) + 1 Sprinter, lave priser (ægte)
+#gamle E-klasser (typisk taxaer) og 1 Sprinter, lave priser, de er ægte
 
 df_mercedes_renset |> arrange(år) |> select(model, årgang, km, pris, link) |> head(5)
-# -> veteranbiler (190 SL fra 1956-61), samlerpriser (ægte) – udelukkes fra sammenligningen i 1.2
+#veteranbiler (190 SL fra 1956-61) med samlerpriser. de er ægte, men kommer ikke med i 1.2
 
 # ---------- 3. fjern ----------
 df_mercedes_renset <- df_mercedes_renset |>
-  filter(carid != "5736777")                                         # mekanikertilbud 9.800 kr.
+  #mekanikertilbuddet til 9.800 kr.
+  filter(carid != "5736777")
 
-nrow(df_mercedes_renset)                                             # 2.835
+#skal give 2.835
+nrow(df_mercedes_renset)
 
-# erhvervskøretøjer – samme filter som de tyske data (se opgave 1.2)
+#erhvervskøretøjer. samme filter som på de tyske data i 1.2
 erhverv <- "sprinter|vito|citan|kasten|actros|arocs|atego|antos|axor|unimog|econic|kran|kipper|lkw|sattel"
 
 df_mercedes_renset |>
   filter(str_detect(paste(model, variant), regex(erhverv, ignore_case = TRUE))) |>
-  select(model, variant, pris)                                       # 14 varebilsbaserede køretøjer (Sprinter, Vito, Citan m.fl.)
+  #14 varebiler (Sprinter, Vito, Citan m.fl.)
+  select(model, variant, pris)
 
 df_mercedes_renset <- df_mercedes_renset |>
-  filter(carid != "5736777",                                         # mekanikertilbud 9.800 kr.
-         !str_detect(paste(model, variant), regex(erhverv, ignore_case = TRUE)))   # erhvervskøretøjer
+  #mekanikertilbuddet til 9.800 kr.
+  filter(carid != "5736777",
+         #og erhvervskøretøjerne
+         !str_detect(paste(model, variant), regex(erhverv, ignore_case = TRUE)))
 
-nrow(df_mercedes_renset)                                             # 2.821
+#skal give 2.821
+nrow(df_mercedes_renset)
 
 # ---------- 4. gem ----------
 saveRDS(df_mercedes_renset, "df_mercedes_renset.rds")

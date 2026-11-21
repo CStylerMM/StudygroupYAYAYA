@@ -43,3 +43,8 @@ CREATE TABLE `pris` (
   KEY `pris_biler_FK` (`carid`),
   CONSTRAINT `pris_biler_FK` FOREIGN KEY (`carid`) REFERENCES `biler` (`carid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE VIEW seneste_pris AS
+SELECT p.carid, p.pris, p.scrapedate
+FROM pris p
+WHERE p.scrapedate = (SELECT MAX(p2.scrapedate) FROM pris p2 WHERE p2.carid = p.carid);

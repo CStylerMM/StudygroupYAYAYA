@@ -15,7 +15,7 @@ con <- dbConnect(MariaDB(),
 # ---------- Trin 1: Byg kørsel II ----------
 
 #kørsel 1 hentes fra databasen: bilerne med deres pris, koblet på carid
-#prisid skal ikke med, den laver databasen selv
+#prisid   ikke med, den laver databasen selv
 df_kørsel1 <- dbReadTable(con, "biler") %>%
   left_join(dbReadTable(con, "pris"), join_by(carid)) %>%
   select(-prisid)
@@ -47,13 +47,12 @@ df_kørsel2 <- bind_rows(df_kørsel2, df_nye)
 
 # ---------- Tjek kørsel II ----------
 
-#skal give 2836 - 5 + 2 = 2833
+#2836 - 5 + 2 = 2833
 nrow(df_kørsel2)
 
-#skal give 2026-11-18
+#2026-11-18
 unique(df_kørsel2$scrapedate)
 
-#dem vi har lavet om, så vi kan genkende dem bagefter
 solgte_id
 ændrede_id
 
@@ -77,7 +76,7 @@ df_solgte <- anti_join(df_forrige, df_kørsel2, join_by(carid))
 df_ændrede <- inner_join(df_kørsel2, df_forrige, join_by(carid), suffix = c("_ny", "_gammel")) %>%
   filter(pris_ny != pris_gammel)
 
-#skal give 2, 5 og 3
+#giver 2, 5 og 3
 nrow(df_nye_biler)
 nrow(df_solgte)
 nrow(df_ændrede)
@@ -126,8 +125,9 @@ dbGetQuery(con, "SELECT COUNT(*) FROM biler WHERE sold = TRUE")
 dbGetQuery(con, paste0("SELECT carid, pris, scrapedate FROM pris WHERE carid IN (",
                        paste(df_ændrede$carid, collapse = ", "), ") ORDER BY carid, scrapedate"))
 
-#viewet skal nu vise den nye pris for de 3
+#viewet viser den nye pris for de 3
 dbGetQuery(con, paste0("SELECT * FROM seneste_pris WHERE carid IN (",
                        paste(df_ændrede$carid, collapse = ", "), ")"))
 
 dbDisconnect(con)
+
